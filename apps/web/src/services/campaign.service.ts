@@ -236,6 +236,15 @@ export interface CampaignRecord {
   /** Impact thresholds already reached, including those without subscribers. */
   impactMilestonesReached?: ImpactMilestone[];
   impactAchieved?: boolean;
+  /** Frequently asked questions specific to this campaign. */
+  faqs?: CampaignFaqItem[];
+}
+
+export interface CampaignFaqItem {
+  id?: string;
+  question: string;
+  answer: string;
+  category?: string;
 }
 
 export const IMPACT_MILESTONES = ["1000_trees", "5000_trees", "10_tons_co2"] as const;

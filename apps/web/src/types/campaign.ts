@@ -78,6 +78,14 @@ export interface CampaignData {
   uniqueContributors?: number;
   contributionCount?: number;
   sustainabilityScore?: CampaignSustainabilityScore;
+  faqs?: CampaignFaqItem[];
+}
+
+export interface CampaignFaqItem {
+  id?: string;
+  question: string;
+  answer: string;
+  category?: string;
 }
 
 export interface CampaignFilterOptions {

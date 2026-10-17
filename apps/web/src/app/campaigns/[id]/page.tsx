@@ -6,6 +6,7 @@ import { getCampaign } from "@/services/campaign.service";
 import { VerificationEvidenceGallery } from "@/components/campaign/VerificationEvidenceGallery";
 import { CampaignImpactCalculator } from "@/components/modules/impact/CampaignImpactCalculator";
 import { CampaignDonationPanel } from "@/components/modules/campaign/donation/CampaignDonationPanel";
+import { CampaignChatbot } from "@/components/campaign/CampaignChatbot";
 
 export const runtime = "nodejs";
 
@@ -89,6 +90,9 @@ export default async function CampaignPage({
       </section>
 
       <VerificationEvidenceGallery evidence={campaign.verificationEvidence ?? []} />
+
+      {/* Campaign Chatbot Assistant for backer questions (#Issue) */}
+      <CampaignChatbot campaign={campaign} />
     </main>
   );
 }
