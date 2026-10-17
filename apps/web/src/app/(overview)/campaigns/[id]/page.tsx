@@ -18,6 +18,9 @@ import {
   Crown,
   TreePine,
   Download,
+  Camera,
+  Package,
+  Coins,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +36,7 @@ import { BackerCommunity } from "@/components/modules/campaign/community/BackerC
 import { CampaignFollowButton } from "@/components/modules/campaign/follow/CampaignFollowButton";
 import { TopBackers } from "@/components/modules/campaign/backers/TopBackers";
 import { CampaignReviews } from "@/components/modules/campaign/reviews/CampaignReviews";
+import { MilestoneFundRelease } from "@/components/modules/campaign/milestones/MilestoneFundRelease";
 import { TOP_BACKERS_LIMIT } from "@/types/campaign-backers";
 import { CampaignFundingVelocityChart } from "@/components/modules/campaign/FundingVelocityChart";
 import { FundingCounter } from "@/components/modules/campaign/FundingCounter";
@@ -580,7 +584,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       {/* Main Content Tabs (Overview, Sponsor Wall #724, Top Backers, Co-Creators #722) */}
       {/* Backer community spaces (#788) render inside the overview sidebar. */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-6">
-        <TabsList aria-label="Campaign navigation tabs" className="grid w-full grid-cols-2 gap-1 rounded-xl border border-zinc-800 bg-zinc-900 p-1 md:grid-cols-4 xl:grid-cols-8">
+        <TabsList aria-label="Campaign navigation tabs" className="grid w-full grid-cols-2 gap-1 rounded-xl border border-zinc-800 bg-zinc-900 p-1 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-9">
           <TabsTrigger value="overview" className="text-xs font-semibold data-[state=active]:bg-purple-600 data-[state=active]:text-white">
             <Target className="mr-1.5 h-4 w-4" /> Overview & Story
           </TabsTrigger>
@@ -592,6 +596,9 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           </TabsTrigger>
           <TabsTrigger value="backers" className="text-xs font-semibold data-[state=active]:bg-purple-600 data-[state=active]:text-white">
             <Crown className="mr-1.5 h-4 w-4 text-amber-400" /> Top Backers
+          </TabsTrigger>
+          <TabsTrigger value="fulfillment" className="text-xs font-semibold data-[state=active]:bg-purple-600 data-[state=active]:text-white">
+            <Package className="mr-1.5 h-4 w-4 text-purple-400" /> Reward Fulfillment
           </TabsTrigger>
           <TabsTrigger value="collaboration" className="text-xs font-semibold data-[state=active]:bg-purple-600 data-[state=active]:text-white">
             <Users className="mr-1.5 h-4 w-4 text-purple-400" /> Co-Creators (#722)
@@ -607,6 +614,9 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           </TabsTrigger>
           <TabsTrigger value="analytics" className="text-xs font-semibold data-[state=active]:bg-purple-600 data-[state=active]:text-white">
             <BarChart3 className="mr-1.5 h-4 w-4 text-emerald-400" /> Analytics
+          </TabsTrigger>
+          <TabsTrigger value="milestone-release" className="text-xs font-semibold data-[state=active]:bg-purple-600 data-[state=active]:text-white">
+            <Coins className="mr-1.5 h-4 w-4 text-emerald-400" /> Tranche Releases
           </TabsTrigger>
         </TabsList>
 
@@ -701,6 +711,14 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
 
           {/* Backer testimonials & star ratings (#1250) */}
           <CampaignReviews campaignId={campaign.id} viewerAddress={viewerAddress} />
+
+          {/* Milestone-based fund release tied to backer approval vote */}
+          <MilestoneFundRelease
+            campaignId={campaign.id}
+            isCreator={isCreatorView}
+            viewerAddress={viewerAddress}
+            campaignStatus={campaign.status}
+          />
         </TabsContent>
 
         <TabsContent value="ar-view">
@@ -725,6 +743,17 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
             creatorAddress={campaign.creator}
             viewerAddress={viewerAddress}
             limit={TOP_BACKERS_LIMIT}
+          />
+        </TabsContent>
+
+        {/* Tab: Creator Reward Fulfillment (#1275) */}
+        <TabsContent value="fulfillment">
+          <RewardFulfillmentPanel
+            campaignId={campaign.id}
+            campaignTitle={campaign.title}
+            creatorAddress={campaign.creator}
+            viewerAddress={viewerAddress}
+            isCreator={isCreatorView}
           />
         </TabsContent>
 
@@ -777,6 +806,16 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
         {/* Tab 8: Analytics for creators */}
         <TabsContent value="analytics">
           <CampaignAnalyticsDashboard campaignId={campaign.id} campaignTitle={campaign.title} />
+        </TabsContent>
+
+        {/* Tab 9: Milestone-based fund release tied to backer approval vote */}
+        <TabsContent value="milestone-release">
+          <MilestoneFundRelease
+            campaignId={campaign.id}
+            isCreator={isCreatorView}
+            viewerAddress={viewerAddress}
+            campaignStatus={campaign.status}
+          />
         </TabsContent>
       </Tabs>
 
