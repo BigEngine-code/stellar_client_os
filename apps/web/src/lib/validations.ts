@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { env } from './env'
 import { StellarService } from './stellar'
 import { validateContractId } from './stream-validation'
+import { MAX_LIVE_STREAM_URL_LENGTH, parseLiveStreamUrl } from './live-stream'
 
 // Stream record type for display
 export interface StreamRecord {
@@ -190,4 +191,38 @@ export const updateCampaignSchema = z.object({
 })
 
 export type UpdateCampaignFormData = z.infer<typeof updateCampaignSchema>
+
+/**
+ * Creator input for attaching a YouTube Live or Twitch stream to a campaign
+ * (issue #1225). URLs are validated to supported watch URLs before a request
+ * leaves the browser; the API re-validates independently.
+ */
+export const campaignLiveStreamSchema = z.object({
+  streamUrl: z
+    .string()
+    .trim()
+    .min(1, 'Stream URL is required')
+    .max(MAX_LIVE_STREAM_URL_LENGTH, `Stream URL must be ${MAX_LIVE_STREAM_URL_LENGTH} characters or fewer`)
+    .superRefine((value, ctx) => {
+      const parsed = parseLiveStreamUrl(value)
+      if (!parsed.ok) ctx.addIssue({ code: z.ZodIssueCode.custom, message: parsed.error })
+    }),
+  replayUrl: z
+    .string()
+    .trim()
+    .optional()
+    .superRefine((value, ctx) => {
+      if (value === undefined || value === '') return
+      const parsed = parseLiveStreamUrl(value)
+      if (!parsed.ok) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Replay URL: ${parsed.error}` })
+    }),
+  title: z
+    .string()
+    .trim()
+    .max(120, 'Stream title must be 120 characters or fewer')
+    .optional(),
+})
+
+export type CampaignLiveStreamFormData = z.infer<typeof campaignLiveStreamSchema>
+
 

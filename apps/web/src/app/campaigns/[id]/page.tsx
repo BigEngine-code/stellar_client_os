@@ -14,6 +14,7 @@ import { StaffPickBadge } from "@/components/modules/campaign/StaffPickBadge";
 import { CampaignComplianceDocumentsList } from "@/components/modules/campaign/compliance/CampaignComplianceDocumentsList";
 import { NFTRewardTiersSection } from "@/components/modules/campaign/reward-nft/NFTRewardTiersSection";
 import { RelatedCampaignsShelf } from "@/components/campaign/RelatedCampaignsShelf";
+import { CampaignLiveStreamSection } from "@/components/modules/campaign/live-stream/CampaignLiveStreamSection";
 
 export const runtime = "nodejs";
 
@@ -71,6 +72,9 @@ export default async function CampaignPage({
           />
         </div>
       </section>
+
+      {/* Live streaming: provider-backed player, replay links, creator controls (#1225) */}
+      <CampaignLiveStreamSection campaignId={campaign.id} />
 
       {/* Real-time CO2 Sequestration Impact Calculator (#839) */}
       <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
