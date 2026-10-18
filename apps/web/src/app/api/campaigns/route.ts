@@ -33,11 +33,12 @@ async function getCampaigns(request: Request) {
   const status = url.searchParams.get("status") as never;
   const creator = url.searchParams.get("creator") ?? undefined;
   const search = url.searchParams.get("search") ?? undefined;
+  const isStaffPick = url.searchParams.has("isStaffPick") ? url.searchParams.get("isStaffPick") === "true" : undefined;
   const includeStats = url.searchParams.get("includeStats") === "true";
   const limit = Number(url.searchParams.get("limit") ?? 20);
   const offset = Number(url.searchParams.get("offset") ?? 0);
   const campaigns = await queryCampaigns({
-    filter: { status: status || undefined, creator, search },
+    filter: { status: status || undefined, creator, search, isStaffPick },
     sort: { field: (url.searchParams.get("sort") as never) || "createdAt", direction: url.searchParams.get("direction") === "asc" ? "ASC" : "DESC" },
     limit: Number.isFinite(limit) ? limit : 20,
     offset: Number.isFinite(offset) ? offset : 0,

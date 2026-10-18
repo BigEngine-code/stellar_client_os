@@ -9,8 +9,10 @@ import { CampaignDonationPanel } from "@/components/modules/campaign/donation/Ca
 import { RewardTiersInstalmentCheckout } from "@/components/modules/campaign/instalments/RewardTiersInstalmentCheckout";
 import { InAppSurveyNotificationBanner } from "@/components/modules/campaign/survey/InAppSurveyNotificationBanner";
 import { CreatorSurveyResultsDashboard } from "@/components/modules/campaign/survey/CreatorSurveyResultsDashboard";
+import { StaffPickBadge } from "@/components/modules/campaign/StaffPickBadge";
 
 import { CampaignComplianceDocumentsList } from "@/components/modules/campaign/compliance/CampaignComplianceDocumentsList";
+import { NFTRewardTiersSection } from "@/components/modules/campaign/reward-nft/NFTRewardTiersSection";
 import { RelatedCampaignsShelf } from "@/components/campaign/RelatedCampaignsShelf";
 import { CampaignViewTracker } from "@/components/campaign/CampaignViewTracker";
 
@@ -33,7 +35,10 @@ export default async function CampaignPage({
       <CampaignViewTracker campaignId={campaign.id} />
       <InAppSurveyNotificationBanner campaignId={campaign.id} />
       <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <p className="text-sm font-medium text-fundable-purple-2">Impact campaign</p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium text-fundable-purple-2">Impact campaign</p>
+          {campaign.isStaffPick && <StaffPickBadge reason={campaign.staffPickReason} size="sm" />}
+        </div>
         <h1 className="mt-2 text-3xl font-bold text-zinc-950 dark:text-white">{campaign.name}</h1>
         {campaign.description && <p className="mt-3 text-zinc-600 dark:text-zinc-300">{campaign.description}</p>}
         <p className="mt-5 text-sm text-zinc-600 dark:text-zinc-300">
@@ -103,6 +108,16 @@ export default async function CampaignPage({
           campaignId={campaign.id}
           creatorAddress={campaign.creatorAddress}
           campaignCloseDate={campaign.deadline}
+        />
+      </section>
+
+      {/* Stellar-Native NFT Reward Tiers & Post-Campaign Airdrops */}
+      <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <NFTRewardTiersSection
+          campaignId={campaign.id}
+          creatorAddress={campaign.creatorAddress}
+          campaignStatus={campaign.status}
+          isClosed={campaign.status === "COMPLETED" || (campaign.deadline ? Date.now() >= campaign.deadline : false)}
         />
       </section>
 

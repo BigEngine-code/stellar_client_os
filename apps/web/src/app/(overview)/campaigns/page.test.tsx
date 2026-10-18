@@ -54,4 +54,13 @@ describe("CampaignsDirectoryPage", () => {
     });
     expect(schedulerLink.getAttribute("href")).toBe("/campaigns/social-scheduler");
   });
+
+  it("renders the Staff Picks section on browse page", () => {
+    render(<CampaignsDirectoryPage />);
+
+    expect(screen.getByRole("region", { name: /staff picks/i })).toBeTruthy();
+    expect(screen.getByText("Curated by Editorial")).toBeTruthy();
+    expect(screen.getAllByTestId("staff-pick-badge").length).toBeGreaterThan(0);
+  });
 });
+

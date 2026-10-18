@@ -11,6 +11,8 @@ import { CampaignAccessibilityControls } from "@/components/modules/campaign/Cam
 import { CampaignSearchPanel } from "@/components/modules/campaign/CampaignSearchPanel";
 import { useCampaigns } from "@/hooks/use-campaigns";
 import { CharityBadge } from "@/components/modules/campaign/CharityBadge";
+import { StaffPickBadge } from "@/components/modules/campaign/StaffPickBadge";
+import { StaffPicksSection } from "@/components/modules/campaign/StaffPicksSection";
 import { useCampaignWishlist } from "@/hooks/use-campaign-wishlist";
 import {
   DISCOVERY_REGIONS,
@@ -141,6 +143,9 @@ const { campaigns } = useCampaigns();
       </div>
       </div>
 
+      {/* Staff Picks Section curated by editorial team */}
+      <StaffPicksSection />
+
       {/* Success Stories Section */}
       <SuccessStories />
 
@@ -252,9 +257,12 @@ const { campaigns } = useCampaigns();
 
                           <div className="space-y-3">
                             <div className="flex items-center justify-between pr-10">
-                              <Badge className="bg-purple-950/60 text-purple-300 border-purple-800 text-[11px]">
-                                {c.category}
-                              </Badge>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <Badge className="bg-purple-950/60 text-purple-300 border-purple-800 text-[11px]">
+                                  {c.category}
+                                </Badge>
+                                {c.isStaffPick && <StaffPickBadge reason={c.staffPickReason} size="sm" />}
+                              </div>
                               <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 text-[10px] whitespace-nowrap ml-2">
                                 <ShieldCheck className="mr-1 h-3 w-3 inline" /> {c.status}
                               </Badge>

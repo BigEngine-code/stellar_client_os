@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { CheckCircle2, Calendar, CreditCard, ChevronRight, AlertCircle, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Calendar, CreditCard, ChevronRight, AlertCircle, ShieldCheck, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useWallet } from "@/providers/StellarWalletProvider";
@@ -80,6 +80,12 @@ export function RewardTiersInstalmentCheckout({
               instalmentEnabled: true,
               allowedPlanMonths: [2, 3, 6],
               perks: ["Custom Drone Footage", "Exclusive Community Vote", "Gold Impact NFT"],
+              nftReward: {
+                enabled: true,
+                assetUrl: "https://ipfs.io/ipfs/QmGoldForestGuardianNFT/gold.png",
+                fileName: "gold-guardian.png",
+                symbol: "GUARDIAN",
+              },
               claimed: 2,
               limit: 15,
               createdAt: Date.now(),
@@ -95,6 +101,12 @@ export function RewardTiersInstalmentCheckout({
               instalmentEnabled: true,
               allowedPlanMonths: [2, 3, 6],
               perks: ["Named Sanctuary Plaque", "Quarterly Creator Briefing", "Platinum Badge"],
+              nftReward: {
+                enabled: true,
+                assetUrl: "https://ipfs.io/ipfs/QmPlatinumBiosphereNFT/platinum.png",
+                fileName: "platinum-benefactor.png",
+                symbol: "PLATINUM",
+              },
               claimed: 1,
               limit: 5,
               createdAt: Date.now(),
@@ -240,11 +252,19 @@ export function RewardTiersInstalmentCheckout({
               <div className="space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-semibold text-zinc-950 dark:text-white">{tier.name}</h3>
-                  {tier.instalmentEnabled && (
-                    <Badge className="bg-emerald-600 text-white text-[11px] whitespace-nowrap">
-                      Instalments Available
-                    </Badge>
-                  )}
+                  <div className="flex flex-col items-end gap-1">
+                    {tier.nftReward?.enabled && (
+                      <Badge className="bg-purple-600 hover:bg-purple-700 text-white text-[11px] whitespace-nowrap flex items-center gap-1">
+                        <Sparkles className="h-3 w-3" />
+                        Stellar NFT Included
+                      </Badge>
+                    )}
+                    {tier.instalmentEnabled && (
+                      <Badge className="bg-emerald-600 text-white text-[11px] whitespace-nowrap">
+                        Instalments Available
+                      </Badge>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-baseline gap-1">
