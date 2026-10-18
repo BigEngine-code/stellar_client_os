@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 
-import { TreePine, Trophy, User2 } from "lucide-react";
+import { SlidersHorizontal, TreePine, Trophy, User2 } from "lucide-react";
 import { Sidebar, useSidebar } from "@/components/ui/sidebar";
 
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -32,6 +32,11 @@ const items = [
     title: "Planter Profile",
     url: "/profile",
     icon: <TreePine aria-hidden="true" className="text-emerald-400 size-5" />,
+  },
+  {
+    title: "Recommendation Preferences",
+    url: "/settings/recommendations",
+    icon: <SlidersHorizontal aria-hidden="true" className="text-white size-5" />,
   },
   {
     title: "Campaigns",
@@ -106,6 +111,11 @@ const mobileItems = [
     title: "Profile",
     url: "/profile",
     icon: <TreePine aria-hidden="true" className="text-emerald-400 size-5" />,
+  },
+  {
+    title: "Preferences",
+    url: "/settings/recommendations",
+    icon: <SlidersHorizontal aria-hidden="true" className="text-white size-5" />,
   },
   {
     title: "Distribute",

@@ -12,6 +12,7 @@ import { CreatorSurveyResultsDashboard } from "@/components/modules/campaign/sur
 
 import { CampaignComplianceDocumentsList } from "@/components/modules/campaign/compliance/CampaignComplianceDocumentsList";
 import { RelatedCampaignsShelf } from "@/components/campaign/RelatedCampaignsShelf";
+import { CampaignViewTracker } from "@/components/campaign/CampaignViewTracker";
 
 export const runtime = "nodejs";
 
@@ -29,6 +30,7 @@ export default async function CampaignPage({
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-10">
+      <CampaignViewTracker campaignId={campaign.id} />
       <InAppSurveyNotificationBanner campaignId={campaign.id} />
       <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
         <p className="text-sm font-medium text-fundable-purple-2">Impact campaign</p>

@@ -10,11 +10,13 @@ import { CampaignImpactCalculator } from "@/components/modules/impact/CampaignIm
 import CampaignCreatorBadge from "@/components/modules/dashboard/CampaignCreatorBadge";
 import MentorshipPanel from "@/components/modules/dashboard/MentorshipPanel";
 import { CO2SequestrationProjection } from "@/components/modules/dashboard/CO2SequestrationProjection";
+import { PersonalizedCampaignRecommendations } from "@/components/campaign/PersonalizedCampaignRecommendations";
 
 const DashboardPage = async () => {
     return (
         <main className="h-full overflow-y-auto space-y-4 md:space-y-12 py-10">
             <StatsOverview />
+            <PersonalizedCampaignRecommendations />
             <CreatorStatsDashboard />
             <CampaignCreatorBadge />
             <MentorshipPanel />

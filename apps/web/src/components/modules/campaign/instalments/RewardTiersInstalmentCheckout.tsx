@@ -5,6 +5,7 @@ import { CheckCircle2, Calendar, CreditCard, ChevronRight, AlertCircle, ShieldCh
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useWallet } from "@/providers/StellarWalletProvider";
+import { PersonalizedCampaignRecommendations } from "@/components/campaign/PersonalizedCampaignRecommendations";
 import {
   RewardTier,
   InstalmentPlanMonths,
@@ -325,6 +326,7 @@ export function RewardTiersInstalmentCheckout({
                   Done
                 </Button>
               </div>
+              <PersonalizedCampaignRecommendations />
             </div>
           ) : (
             <div className="space-y-6">
