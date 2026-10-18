@@ -434,6 +434,22 @@ export const typeDefs = /* GraphQL */`
     cumulative: String!
   }
 
+  type BenchmarkMetric {
+    label: String!
+    current: Float!
+    benchmark: Float!
+    unit: String!
+    delta: Float!
+  }
+
+  type CampaignBenchmark {
+    category: String!
+    anonymizedSampleSize: Int!
+    comparedTo: String!
+    metrics: [BenchmarkMetric!]!
+    suggestions: [String!]!
+  }
+
   type CampaignAnalyticsDashboard {
     campaignId: ID!
     updatedAt: Int!
@@ -444,6 +460,7 @@ export const typeDefs = /* GraphQL */`
     dailyTrend: [DailyFundingPoint!]!
     hourlyTrend: [HourlyFundingPoint!]
     totals: CampaignAnalyticsTotals!
+    benchmark: CampaignBenchmark!
   }
 
   type CampaignAnalyticsTotals {
