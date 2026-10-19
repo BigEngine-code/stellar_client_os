@@ -164,6 +164,9 @@ export interface CampaignRecord {
   /** Optional creator-authored copy for post-pledge thank-you emails. */
   pledgeThankYouGreeting?: string;
   pledgeThankYouBody?: string;
+  pledgeThankYouImageUrl?: string;
+  pledgeThankYouVideoUrl?: string;
+  pledgeThankYouNextSteps?: string;
   name: string;
   description?: string;
   /** Detected ISO 639-1 language code of the campaign description. */

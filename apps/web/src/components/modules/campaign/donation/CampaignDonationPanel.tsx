@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { Heart, Receipt, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useWallet } from "@/providers/StellarWalletProvider";
+import { PledgeThankYouContent, type PledgeThankYouDetails } from "@/components/modules/campaign/thank-you/PledgeThankYouContent";
 import {
   DONATION_ALLOCATION_DESCRIPTION,
   DONATION_PRESET_AMOUNTS,
@@ -56,6 +57,31 @@ export function CampaignDonationPanel({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [receipt, setReceipt] = useState<DonationReceipt | null>(null);
+  const [thankYouDetails, setThankYouDetails] = useState<PledgeThankYouDetails | null>(null);
+  const [thankYouError, setThankYouError] = useState<string | null>(null);
+  const [loadingThankYou, setLoadingThankYou] = useState(false);
+
+  useEffect(() => {
+    if (!receipt) return;
+    let active = true;
+    setLoadingThankYou(true);
+    setThankYouError(null);
+    fetch(`/api/campaigns/${campaignId}/thank-you`)
+      .then(async (response) => {
+        const body = (await response.json()) as PledgeThankYouDetails & { error?: string };
+        if (!response.ok) throw new Error(body.error ?? "Could not load the creator's thank-you message.");
+        if (active) setThankYouDetails(body);
+      })
+      .catch((cause: unknown) => {
+        if (active) setThankYouError(cause instanceof Error ? cause.message : "Could not load the creator's thank-you message.");
+      })
+      .finally(() => {
+        if (active) setLoadingThankYou(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [campaignId, receipt]);
 
   const reset = () => {
     setAmount("");
@@ -65,6 +91,8 @@ export function CampaignDonationPanel({
     setAnonymous(false);
     setError("");
     setReceipt(null);
+    setThankYouDetails(null);
+    setThankYouError(null);
   };
 
   const submit = async () => {
@@ -129,6 +157,11 @@ export function CampaignDonationPanel({
         <p className="mt-2 text-sm text-zinc-300">
           Thank you — your contribution goes straight to the campaign creator.
         </p>
+        {loadingThankYou && <p className="mt-4 text-sm text-zinc-400">Loading the creator&apos;s message…</p>}
+        {thankYouError && <p role="alert" className="mt-4 text-sm text-rose-400">{thankYouError}</p>}
+        {!loadingThankYou && !thankYouError && (
+          <PledgeThankYouContent details={thankYouDetails ?? { greeting: "Thank you for backing this campaign." }} />
+        )}
 
         <dl className="mt-6 divide-y divide-white/10 rounded-xl border border-white/10">
           <div className="flex justify-between gap-4 p-3 text-sm">

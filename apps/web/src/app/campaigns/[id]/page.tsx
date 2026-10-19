@@ -14,6 +14,8 @@ import { StaffPickBadge } from "@/components/modules/campaign/StaffPickBadge";
 import { CampaignComplianceDocumentsList } from "@/components/modules/campaign/compliance/CampaignComplianceDocumentsList";
 import { NFTRewardTiersSection } from "@/components/modules/campaign/reward-nft/NFTRewardTiersSection";
 import { RelatedCampaignsShelf } from "@/components/campaign/RelatedCampaignsShelf";
+import { CampaignReviews } from "@/components/modules/campaign/reviews/CampaignReviews";
+import { CampaignCreatorReviewSettings } from "@/components/modules/campaign/reviews/CampaignCreatorReviewSettings";
 
 export const runtime = "nodejs";
 
@@ -137,6 +139,11 @@ export default async function CampaignPage({
         creatorAddress={campaign.creatorAddress}
         campaignStatus={campaign.status}
       />
+
+      <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <CampaignReviews campaignId={campaign.id} />
+        <CampaignCreatorReviewSettings campaignId={campaign.id} creatorAddress={campaign.creator} />
+      </section>
 
       {/* Horizontally Scrollable Related Campaigns Shelf */}
       <RelatedCampaignsShelf currentCampaignId={campaign.id} />
