@@ -285,6 +285,25 @@ export const typeDefs = /* GraphQL */`
     breakdown: CampaignHealthBreakdown!
   }
 
+  """
+  Creator-defined impact metric for a socially-focused campaign.
+  The value is derived from the amount raised divided by costPerUnit.
+  """
+  type ImpactMetric {
+    """Human-readable metric name (e.g. 'Trees Planted')."""
+    name: String!
+    """Unit of the impact (e.g. 'trees', 'meals', 'litres')."""
+    unit: String!
+    """Formula identifier (e.g. 'amount_raised / cost_per_unit')."""
+    formula: String!
+    """Cost per single unit of impact (as string)."""
+    costPerUnit: String!
+    """Current computed impact value."""
+    value: Float!
+    """Human-readable formatted value including the unit."""
+    formattedValue: String!
+  }
+
   type Campaign {
     id: ID!
     creator: String!
@@ -311,6 +330,8 @@ export const typeDefs = /* GraphQL */`
     healthAssessment: CampaignHealthAssessment
     sponsors: [CampaignSponsor!]!
     statusHistory: [CampaignStatusHistory!]!
+    """Creator-defined impact metric for socially-focused campaigns."""
+    impactMetric: ImpactMetric
   }
 
   input TreeFilter {
@@ -491,6 +512,82 @@ export const typeDefs = /* GraphQL */`
     nextMatchAmount: String!
   }
 
+  """Lifecycle status of a campaign dispute."""
+  enum DisputeStatus {
+    OPEN
+    AWAITING_CREATOR_RESPONSE
+    UNDER_REVIEW
+    RESOLVED
+    REJECTED
+  }
+
+  """Reason a backer is filing a dispute."""
+  enum DisputeReason {
+    UNDELIVERED_REWARD
+    FRAUDULENT_CAMPAIGN
+    MISREPRESENTED_IMPACT
+    OTHER
+  }
+
+  """Type of refund issued by a platform mediator."""
+  enum RefundType {
+    NONE
+    PARTIAL
+    FULL
+  }
+
+  """A formal dispute raised by a backer against a campaign."""
+  type CampaignDispute {
+    id: ID!
+    campaignId: ID!
+    backer: String!
+    reason: DisputeReason!
+    description: String!
+    status: DisputeStatus!
+    """Unix timestamp (seconds) when the dispute was filed."""
+    filedAt: Int!
+    """Unix timestamp (seconds) by which the creator must respond."""
+    creatorResponseDeadline: Int!
+    """Creator's response, if any."""
+    creatorResponse: String
+    """Unix timestamp (seconds) of the creator's response."""
+    creatorRespondedAt: Int
+    """Platform mediator assigned to the dispute."""
+    mediator: String
+    """Refund type issued by the mediator."""
+    refundType: RefundType!
+    """Refund amount (as string), if any."""
+    refundAmount: String
+    """Unix timestamp (seconds) when the dispute was resolved."""
+    resolvedAt: Int
+    """Mediator's resolution notes."""
+    resolutionNotes: String
+  }
+
+  """Input for a backer filing a dispute."""
+  input FileDisputeInput {
+    campaignId: ID!
+    backer: String!
+    reason: DisputeReason!
+    description: String!
+  }
+
+  """Input for a creator responding to a dispute."""
+  input RespondToDisputeInput {
+    disputeId: ID!
+    creator: String!
+    response: String!
+  }
+
+  """Input for a platform mediator resolving a dispute."""
+  input ResolveDisputeInput {
+    disputeId: ID!
+    mediator: String!
+    refundType: RefundType!
+    refundAmount: String
+    resolutionNotes: String
+  }
+
   type Query {
     """
     Search individual sponsored trees derived from indexed payment streams.
@@ -594,6 +691,16 @@ export const typeDefs = /* GraphQL */`
     The grant allocations awarded to a campaign across all programs.
     """
     campaignGrantAllocations(campaignId: ID!): [GrantAllocation!]!
+
+    """
+    Disputes filed against a campaign by backers.
+    """
+    campaignDisputes(campaignId: ID!): [CampaignDispute!]!
+
+    """
+    A single dispute by its identifier.
+    """
+    dispute(id: ID!): CampaignDispute
   }
 
   """
@@ -616,5 +723,20 @@ export const typeDefs = /* GraphQL */`
     Clones an indexed stream so a creator can start from an existing campaign.
     """
     cloneCampaign(id: ID!, network: Network): CloneResult
+
+    """
+    Files a dispute against a campaign (post-campaign close).
+    """
+    fileDispute(input: FileDisputeInput!): CampaignDispute!
+
+    """
+    Creator responds to a dispute within the response window.
+    """
+    respondToDispute(input: RespondToDisputeInput!): CampaignDispute!
+
+    """
+    Platform mediator resolves a dispute with a partial or full refund.
+    """
+    resolveDispute(input: ResolveDisputeInput!): CampaignDispute!
   }
 `;
