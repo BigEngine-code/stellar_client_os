@@ -249,6 +249,21 @@ export interface CampaignRecord {
   insuranceClaim?: CampaignInsuranceClaim;
   /** Time-limited stretch goals that unlock special backer rewards. */
   stretchGoals?: import("./campaign-stretch-goals.service").StretchGoal[];
+  /** Tiered funding goals with escalating deliverables (issue #1247). */
+  goalTiers?: {
+    minimum: {
+      amount: string;
+      description: string;
+    };
+    goal: {
+      amount: string;
+      description: string;
+    };
+    stretch?: {
+      amount: string;
+      description: string;
+    };
+  };
   /** Funding-percentage milestones already emailed to the creator. */
   /** Funding milestones (e.g. 25, 50, 75, 100) that have already triggered a
    * creator notification for this campaign (issue #793). */
