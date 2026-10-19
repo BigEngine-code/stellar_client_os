@@ -1,4 +1,4 @@
-import { createCampaign, findDuplicateCampaigns, queryCampaigns } from "@/services/campaign.service";
+import { createCampaign, findDuplicateCampaigns, isValidCampaignPartners, queryCampaigns } from "@/services/campaign.service";
 import {
   detectLanguage,
   hasOnlySupportedTranslationLocales,
@@ -101,9 +101,13 @@ async function postCampaign(request: Request) {
         registrationNumber?: unknown;
         country?: unknown;
       };
+      partners?: unknown;
     };
     if (!body.creator || !body.name || !body.goalAmount) {
       return Response.json({ error: "creator, name, and goalAmount are required" }, { status: 400 });
+    }
+    if (body.partners !== undefined && !isValidCampaignPartners(body.partners)) {
+      return Response.json({ error: "partners must contain up to 20 entries with a name and valid HTTP(S) logo and website URLs" }, { status: 400 });
     }
     if (body.pledgeThankYouGreeting !== undefined && (typeof body.pledgeThankYouGreeting !== "string" || body.pledgeThankYouGreeting.length > 240)) {
       return Response.json({ error: "pledgeThankYouGreeting must be 240 characters or fewer" }, { status: 400 });
@@ -268,6 +272,7 @@ const description = body.description ?? "";
       underrepresentedTags: body.underrepresentedTags,
       durationMs,
       goalAmount: body.goalAmount,
+      partners: body.partners,
       network: body.network,
       nonprofitPartner,
       language,

@@ -14,6 +14,7 @@ import { StaffPickBadge } from "@/components/modules/campaign/StaffPickBadge";
 import { CampaignComplianceDocumentsList } from "@/components/modules/campaign/compliance/CampaignComplianceDocumentsList";
 import { NFTRewardTiersSection } from "@/components/modules/campaign/reward-nft/NFTRewardTiersSection";
 import { RelatedCampaignsShelf } from "@/components/campaign/RelatedCampaignsShelf";
+import { CampaignPartnersSection } from "@/components/campaign/CampaignPartnersSection";
 
 export const runtime = "nodejs";
 
@@ -120,6 +121,8 @@ export default async function CampaignPage({
       </section>
 
       <VerificationEvidenceGallery evidence={campaign.verificationEvidence ?? []} />
+
+      <CampaignPartnersSection partners={campaign.partners} />
 
       {/* Compliance & Due Diligence Documents */}
       <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
