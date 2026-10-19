@@ -12,6 +12,7 @@ import MentorshipPanel from "@/components/modules/dashboard/MentorshipPanel";
 import { CO2SequestrationProjection } from "@/components/modules/dashboard/CO2SequestrationProjection";
 import { StaffPicksSection } from "@/components/modules/campaign/StaffPicksSection";
 import { BackerNotificationPreferencePanel } from "@/components/modules/dashboard/BackerNotificationPreferencePanel";
+import { WebhookEventLog } from "@/components/modules/dashboard/WebhookEventLog";
 
 const DashboardPage = async () => {
     return (
@@ -20,6 +21,7 @@ const DashboardPage = async () => {
             <BackerNotificationPreferencePanel />
             <StaffPicksSection />
             <CreatorStatsDashboard />
+            <WebhookEventLog />
             <CampaignCreatorBadge />
             <MentorshipPanel />
             <ForestReportExport />

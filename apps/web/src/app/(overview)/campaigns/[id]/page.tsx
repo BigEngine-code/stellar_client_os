@@ -40,6 +40,7 @@ import { CampaignFundingVelocityChart } from "@/components/modules/campaign/Fund
 import { FundingCounter } from "@/components/modules/campaign/FundingCounter";
 import { CampaignAccessibilityControls } from "@/components/modules/campaign/CampaignAccessibilityControls";
 import { CampaignImpactCalculator } from "@/components/modules/impact/CampaignImpactCalculator";
+import { BackerRoiCalculator } from "@/components/modules/campaign/roi/BackerRoiCalculator";
 import { CampaignFollow } from "@/components/modules/campaign/CampaignFollow";
 import { VerificationMediaGallery, type VerificationMediaItem } from "@/components/modules/campaign/VerificationMediaGallery";
 import { CO2SequestrationProjection } from "@/components/modules/dashboard/CO2SequestrationProjection";
@@ -676,6 +677,9 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
                 campaignTreeCount={Number(campaign.treesPlanted.replace(/,/g, ""))}
                 readOnly
               />
+
+              {/* Backer ROI estimate for revenue-share / equity campaigns (#1244); hidden otherwise. */}
+              <BackerRoiCalculator campaignId={campaign.id} />
 
               <VerificationMediaGallery items={verificationMedia} />
 

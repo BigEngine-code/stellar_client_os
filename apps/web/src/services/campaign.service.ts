@@ -7,6 +7,7 @@ import {
   type CampaignPushNotifier,
 } from "./campaign-notification.service";
 import { CampaignWebhookService } from "./campaign-webhook.service";
+import { creatorWebhookService } from "./creator-webhook.service";
 import { pushNotificationService } from "./push-notification.service";
 import { campaignImpactNftService } from "./campaign-impact-nft.service";
 import { campaignNFTRewardService } from "./campaign-nft-reward.service";
@@ -1050,6 +1051,21 @@ export async function transitionCampaignStatus(
     }],
   };
   const saved = await dataSource.saveCampaign(next);
+  if (toStatus === "COMPLETED" || toStatus === "FAILED") {
+    // Creator-configured lifecycle webhook (#1220).
+    void creatorWebhookService.notify(saved.creator, "campaign.ended", {
+      eventId: `${campaign.id}:ended:${now}`,
+      campaignId: campaign.id,
+      campaignName: saved.name,
+      outcome: toStatus,
+      endedAt: new Date(now).toISOString(),
+      raisedAmount: saved.raisedAmount,
+      goalAmount: saved.goalAmount,
+      sponsorCount: saved.sponsorCount,
+    }).catch((error) => {
+      console.error(`[Creator webhook] Failed to dispatch campaign.ended for ${campaign.id}:`, error);
+    });
+  }
   if (toStatus === "COMPLETED") {
     void new CampaignWebhookService().campaignCompleted({
       completionId: `${campaign.id}:completed:${now}`,
