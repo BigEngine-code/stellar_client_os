@@ -1,4 +1,4 @@
-import { getCampaign, transitionCampaignStatus } from "../../../../services/campaign.service";
+import { getCampaign, isValidCampaignPartners, transitionCampaignStatus } from "../../../../services/campaign.service";
 import {
   detectLanguage,
   hasOnlySupportedTranslationLocales,
@@ -74,7 +74,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 speciesCount?: number;
       countries?: string[];
       location?: string;
+      partners?: unknown;
     };
+    if (body.partners !== undefined && !isValidCampaignPartners(body.partners)) {
+      return noStore({ error: "partners must contain up to 20 entries with a name and valid HTTP(S) logo and website URLs" }, { status: 400 });
+    }
     if (body.language && !isSupportedTranslationLocale(body.language)) {
       return noStore({ error: "language is not supported" }, { status: 400 });
     }
@@ -134,7 +138,7 @@ if (body.fundsRaised !== undefined && (!Number.isFinite(body.fundsRaised) || bod
       if (!body.changedBy) return noStore({ error: "changedBy is required when changing status" }, { status: 400 });
       updated = await transitionCampaignStatus(campaign, body.status, body.changedBy, body.reason);
     }
-if (body.name !== undefined || body.description !== undefined || body.language !== undefined || body.translations !== undefined || body.localizedContent !== undefined || body.autoTranslate !== undefined || body.treeCount !== undefined || body.co2Sequestration !== undefined || body.speciesCount !== undefined || body.pledgeThankYouGreeting !== undefined || body.pledgeThankYouBody !== undefined) {
+if (body.name !== undefined || body.description !== undefined || body.language !== undefined || body.translations !== undefined || body.localizedContent !== undefined || body.autoTranslate !== undefined || body.treeCount !== undefined || body.co2Sequestration !== undefined || body.speciesCount !== undefined || body.pledgeThankYouGreeting !== undefined || body.pledgeThankYouBody !== undefined || body.partners !== undefined) {
       const language = body.language ? normalizeTranslationLocale(body.language)! : updated.language ?? detectLanguage(body.description ?? updated.description ?? "");
       const translations = { ...updated.translations, ...body.translations };
       const description = body.description ?? updated.description ?? "";
@@ -148,6 +152,7 @@ if (body.name !== undefined || body.description !== undefined || body.language !
         description,
         pledgeThankYouGreeting: body.pledgeThankYouGreeting ?? updated.pledgeThankYouGreeting,
         pledgeThankYouBody: body.pledgeThankYouBody ?? updated.pledgeThankYouBody,
+        partners: body.partners === undefined ? updated.partners : body.partners,
         language,
         translations,
         localizedContent,

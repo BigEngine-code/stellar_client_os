@@ -37,6 +37,11 @@ export function RewardTiersInstalmentCheckout({
   const [loadingBreakdown, setLoadingBreakdown] = useState(false);
 
   const [backerEmail, setBackerEmail] = useState("");
+  const [recoveryRemindersEnabled, setRecoveryRemindersEnabled] = useState(true);
+  const [recoveryTierId, setRecoveryTierId] = useState<string | null>(null);
+  const [isRecovering, setIsRecovering] = useState(false);
+  const [isRecoverySession, setIsRecoverySession] = useState(false);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [completedPledge, setCompletedPledge] = useState<BackerInstalmentPledge | null>(null);
@@ -122,6 +127,66 @@ export function RewardTiersInstalmentCheckout({
     loadTiers();
   }, [campaignId, initialTiers]);
 
+  useEffect(() => {
+    const recoveryToken = new URLSearchParams(window.location.search).get("pledgeRecovery");
+    if (!recoveryToken) return;
+
+    setIsRecovering(true);
+    fetch(`/api/pledge-recovery/${encodeURIComponent(recoveryToken)}`)
+      .then(async (response) => {
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || "This pledge recovery link is no longer available.");
+        if (body.details.campaignId !== campaignId) throw new Error("This pledge recovery link belongs to a different campaign.");
+        setRecoveryTierId(body.details.tierId);
+        setSelectedPlanMonths(body.details.planMonths);
+        setBackerEmail(body.details.backerEmail);
+        setRecoveryRemindersEnabled(true);
+        setIsRecoverySession(true);
+      })
+      .catch((err: unknown) => {
+        setRecoveryError(err instanceof Error ? err.message : "Unable to restore your pledge.");
+      });
+  }, [campaignId]);
+
+  useEffect(() => {
+    if (isRecovering || isRecoverySession || completedPledge || !selectedTier || !address || !isConnected || !backerEmail.trim()) return;
+    const email = backerEmail.trim();
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch("/api/pledge-recovery", {
+          method: recoveryRemindersEnabled ? "POST" : "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            campaignId,
+            tierId: selectedTier.id,
+            backerAddress: address,
+            backerEmail: email,
+            planMonths: selectedPlanMonths,
+          }),
+        });
+        if (!response.ok) {
+          const body = await response.json();
+          throw new Error(body.error || "Unable to update checkout reminder settings.");
+        }
+        setRecoveryError(null);
+      } catch (err) {
+        setRecoveryError(err instanceof Error ? err.message : "Unable to update checkout reminder settings.");
+      }
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [
+    address,
+    backerEmail,
+    campaignId,
+    completedPledge,
+    isConnected,
+    isRecovering,
+    isRecoverySession,
+    recoveryRemindersEnabled,
+    selectedPlanMonths,
+    selectedTier,
+  ]);
+
   // Fetch plan breakdown when selected tier or chosen months change
   const fetchBreakdown = useCallback(async (tier: RewardTier, months: InstalmentPlanMonths) => {
     try {
@@ -169,6 +234,19 @@ export function RewardTiersInstalmentCheckout({
     }
   }, [campaignId, campaignCloseDate]);
 
+  useEffect(() => {
+    if (!recoveryTierId || tiers.length === 0) return;
+    const tier = tiers.find((item) => item.id === recoveryTierId);
+    if (!tier) {
+      setRecoveryError("The reward tier from this recovery link is no longer available.");
+      return;
+    }
+    setSelectedTier(tier);
+    fetchBreakdown(tier, selectedPlanMonths);
+    setRecoveryTierId(null);
+    setIsRecovering(false);
+  }, [fetchBreakdown, recoveryTierId, selectedPlanMonths, tiers]);
+
   const handleSelectTier = (tier: RewardTier) => {
     setSelectedTier(tier);
     setCompletedPledge(null);
@@ -197,6 +275,23 @@ export function RewardTiersInstalmentCheckout({
     setError(null);
 
     try {
+      if (recoveryRemindersEnabled && backerEmail.trim()) {
+        const recoveryResponse = await fetch("/api/pledge-recovery", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            campaignId,
+            tierId: selectedTier.id,
+            backerAddress: address,
+            backerEmail: backerEmail.trim(),
+            planMonths: selectedPlanMonths,
+          }),
+        });
+        if (!recoveryResponse.ok) {
+          const body = await recoveryResponse.json();
+          setRecoveryError(body.error || "Unable to save checkout reminder settings.");
+        }
+      }
       const res = await fetch(`/api/campaigns/${campaignId}/reward-tiers/${selectedTier.id}/instalments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -448,6 +543,24 @@ export function RewardTiersInstalmentCheckout({
                   className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-purple-600 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
                 />
               </div>
+
+              {backerEmail.trim() && (
+                <label className="flex items-start gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+                  <input
+                    type="checkbox"
+                    checked={recoveryRemindersEnabled}
+                    onChange={(event) => setRecoveryRemindersEnabled(event.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>Email me one reminder if I leave checkout without completing my pledge. You can opt out from the reminder email.</span>
+                </label>
+              )}
+
+              {recoveryError && (
+                <p role="status" className="text-xs text-amber-700 dark:text-amber-300">
+                  {recoveryError}
+                </p>
+              )}
 
               {error && (
                 <div className="flex items-center gap-2 rounded-md bg-rose-50 p-3 text-xs text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">

@@ -2,13 +2,14 @@
 
 import React, { useState } from "react";
 import { updateCampaignSchema, UpdateCampaignFormData } from "@/lib/validations";
-import { Campaign, CampaignStatus } from "@/types";
+import type { CampaignRecord } from "@/services/campaign.service";
+import { Plus, Trash2 } from "lucide-react";
 
 interface CampaignEditModalProps {
   isOpen: boolean;
   onClose: () => void;
-  campaign: Campaign;
-  onSuccess?: (updatedCampaign: Partial<Campaign>) => void;
+  campaign: CampaignRecord;
+  onSuccess?: (updatedCampaign: Partial<CampaignRecord>) => void;
 }
 
 /**
@@ -25,17 +26,20 @@ export const CampaignEditModal: React.FC<CampaignEditModalProps> = ({
 }) => {
   const [name, setName] = useState(campaign.name || "");
   const [description, setDescription] = useState(campaign.description || "");
-  const [goalAmount, setGoalAmount] = useState(campaign.goal_amount ? campaign.goal_amount.toString() : "");
+  const [goalAmount, setGoalAmount] = useState(campaign.goalAmount || "");
   const [deadline, setDeadline] = useState(
-    campaign.end_time ? new Date(campaign.end_time * 1000).toISOString().slice(0, 16) : ""
+    campaign.durationMs !== undefined
+      ? new Date(campaign.createdAt + campaign.durationMs).toISOString().slice(0, 16)
+      : ""
   );
+  const [partners, setPartners] = useState(campaign.partners ?? []);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const isEditable = campaign.status === CampaignStatus.Draft || campaign.status === CampaignStatus.Active;
+  const isEditable = campaign.status === "DRAFT" || campaign.status === "ACTIVE";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,12 +76,13 @@ export const CampaignEditModal: React.FC<CampaignEditModalProps> = ({
           description,
           goalAmount,
           deadline: Math.floor(new Date(deadline).getTime() / 1000),
+          partners: partners.filter((partner) => partner.name || partner.logoUrl || partner.url),
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to update campaign");
+        throw new Error(errorData.message || errorData.error || "Failed to update campaign");
       }
 
       const updated = await response.json();
@@ -178,6 +183,64 @@ export const CampaignEditModal: React.FC<CampaignEditModalProps> = ({
               {errors.deadline && (
                 <p className="text-red-400 text-xs mt-1">{errors.deadline}</p>
               )}
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <h3 className="text-sm font-medium text-slate-300">Partners and sponsors</h3>
+                <p className="text-xs text-slate-400">Add a name, logo URL, and website for each official partner.</p>
+              </div>
+              {partners.map((partner, index) => (
+                <div key={index} className="space-y-2 rounded-lg border border-slate-700 p-3">
+                  <input
+                    aria-label={`Partner ${index + 1} name`}
+                    value={partner.name}
+                    onChange={(event) => setPartners((current) => current.map((item, itemIndex) =>
+                      itemIndex === index ? { ...item, name: event.target.value } : item
+                    ))}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white"
+                    placeholder="Partner name"
+                  />
+                  <input
+                    aria-label={`Partner ${index + 1} logo URL`}
+                    type="url"
+                    value={partner.logoUrl}
+                    onChange={(event) => setPartners((current) => current.map((item, itemIndex) =>
+                      itemIndex === index ? { ...item, logoUrl: event.target.value } : item
+                    ))}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white"
+                    placeholder="https://example.org/logo.png"
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      aria-label={`Partner ${index + 1} website URL`}
+                      type="url"
+                      value={partner.url}
+                      onChange={(event) => setPartners((current) => current.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, url: event.target.value } : item
+                      ))}
+                      className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white"
+                      placeholder="https://example.org"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPartners((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-3 text-sm text-slate-300 hover:bg-slate-700"
+                      aria-label={`Remove partner ${index + 1}`}
+                    >
+                      <Trash2 className="h-4 w-4" /> Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setPartners((current) => [...current, { name: "", logoUrl: "", url: "" }])}
+                disabled={partners.length >= 20}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" /> Add partner
+              </button>
             </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
