@@ -11,6 +11,7 @@ import CampaignCreatorBadge from "@/components/modules/dashboard/CampaignCreator
 import MentorshipPanel from "@/components/modules/dashboard/MentorshipPanel";
 import { CO2SequestrationProjection } from "@/components/modules/dashboard/CO2SequestrationProjection";
 import { StaffPicksSection } from "@/components/modules/campaign/StaffPicksSection";
+import { SpotlightSection } from "@/components/modules/campaign/SpotlightSection";
 import { BackerNotificationPreferencePanel } from "@/components/modules/dashboard/BackerNotificationPreferencePanel";
 
 const DashboardPage = async () => {
@@ -18,6 +19,7 @@ const DashboardPage = async () => {
         <main className="h-full overflow-y-auto space-y-4 md:space-y-12 py-10">
             <StatsOverview />
             <BackerNotificationPreferencePanel />
+            <SpotlightSection />
             <StaffPicksSection />
             <CreatorStatsDashboard />
             <CampaignCreatorBadge />
