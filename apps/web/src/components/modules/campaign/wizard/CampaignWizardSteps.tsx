@@ -309,6 +309,20 @@ export function TimelineStep({ data, errors, updateField, addMilestone, removeMi
         </div>
 
         <div>
+          <Label htmlFor="scheduledPublishAt" className="text-zinc-200">
+            Future launch date (optional)
+          </Label>
+          <Input
+            id="scheduledPublishAt"
+            type="datetime-local"
+            value={data.scheduledPublishAt}
+            min={new Date().toISOString().slice(0, 16)}
+            onChange={(e) => updateField("scheduledPublishAt", e.target.value)}
+            className="mt-1.5 border-zinc-700 bg-zinc-900 text-zinc-100 focus:border-emerald-500"
+          />
+          <p className="mt-1 text-xs text-zinc-500">Scheduled campaigns remain private to you until this time.</p>
+        </div>
+        <div>
           <Label htmlFor="endDate" className="text-zinc-200">
             Campaign End Date <span className="text-rose-400">*</span>
           </Label>
@@ -533,6 +547,7 @@ export function ImpactStep({ data, errors, updateField }: StepProps) {
 
 // Step 5: Preview Component
 export function PreviewStep({ data, errors }: { data: CampaignWizardData; errors: WizardStepErrors }) {
+  const publicationLabel = data.scheduledPublishAt ? `Scheduled for ${new Date(data.scheduledPublishAt).toLocaleString()}` : "Launch immediately after approval";
   const hasErrors = Object.keys(errors).length > 0;
   const previewCountries = parseCountryList(data.targetCountries || "");
   const previewMultiplier = computeGeographicMultiplier(previewCountries.length);
@@ -541,6 +556,7 @@ export function PreviewStep({ data, errors }: { data: CampaignWizardData; errors
 
   return (
     <div className="space-y-6">
+      <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/20 p-3 text-sm text-emerald-200" role="status">{publicationLabel}</div>
       <div className="border-b border-zinc-800 pb-4 flex items-center justify-between">
         <div>
           <h3 className="text-lg font-medium text-zinc-100 flex items-center gap-2">
