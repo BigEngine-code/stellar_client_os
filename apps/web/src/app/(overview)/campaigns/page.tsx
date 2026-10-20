@@ -18,6 +18,7 @@ import {
   DISCOVERY_REGIONS,
   DISCOVERY_TREE_SPECIES,
   filterCampaignsByDiscoveryOptions,
+  getAllCampaignTags,
   type DiscoveryRegion,
   type DiscoveryTreeSpecies,
 } from "@/lib/campaign-discovery-filters";
@@ -37,10 +38,42 @@ const { campaigns } = useCampaigns();
   const { toggleWishlist, isInWishlist } = useCampaignWishlist();
   const [treeSpecies, setTreeSpecies] = useState<DiscoveryTreeSpecies | "All">("All");
   const [region, setRegion] = useState<DiscoveryRegion | "All">("All");
-  const filteredCampaigns = useMemo(
-    () => filterCampaignsByDiscoveryOptions(campaigns, { treeSpecies, region }),
-    [campaigns, treeSpecies, region],
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  // Distinct categories present across all campaigns, used to render the
+  // multi-category facet checkboxes.
+  const availableCategories = useMemo(
+    () => Array.from(new Set(campaigns.map((c) => c.category).filter(Boolean))).sort(),
+    [campaigns],
   );
+
+  // Distinct tags previously used across campaigns, used to populate the
+  // searchable tag multi-select.
+  const availableTags = useMemo(() => getAllCampaignTags(campaigns), [campaigns]);
+
+  const filteredCampaigns = useMemo(
+    () =>
+      filterCampaignsByDiscoveryOptions(campaigns, {
+        treeSpecies,
+        region,
+        categories: selectedCategories,
+        tags: selectedTags,
+      }),
+    [campaigns, treeSpecies, region, selectedCategories, selectedTags],
+  );
+
+  const toggleCategory = (category: string) => {
+    setSelectedCategories((prev) =>
+      prev.includes(category) ? prev.filter((item) => item !== category) : [...prev, category],
+    );
+  };
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag],
+    );
+  };
 
   // ---------------------------------------------------------------------------
   // Virtual scrolling for the campaign list — handles 10k+ campaigns without
@@ -186,6 +219,68 @@ const { campaigns } = useCampaigns();
             Showing {filteredCampaigns.length} of {campaigns.length} campaigns
           </p>
         </div>
+
+        {/* Category facet — multi-select checkboxes */}
+        <fieldset className="mt-4 border-t border-zinc-800 pt-4">
+          <legend className="text-xs font-medium text-zinc-300">Categories</legend>
+          {availableCategories.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
+              {availableCategories.map((category) => (
+                <label key={category} className="flex items-center gap-2 text-xs text-zinc-300">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-zinc-700 bg-zinc-800 text-purple-500 focus:ring-purple-500"
+                    checked={selectedCategories.includes(category)}
+                    onChange={() => toggleCategory(category)}
+                    aria-label={`Filter by category ${category}`}
+                  />
+                  {category}
+                </label>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-2 text-xs text-zinc-500">No categories available yet.</p>
+          )}
+        </fieldset>
+
+        {/* Tag facet — multi-select with searchable options */}
+        <div className="mt-4 border-t border-zinc-800 pt-4">
+          <label className="flex w-full flex-col gap-1.5 text-xs font-medium text-zinc-300 sm:max-w-md">
+            <span>Tags</span>
+            <select
+              aria-label="Filter by tags"
+              multiple
+              size={Math.min(Math.max(availableTags.length, 3), 6)}
+              value={selectedTags}
+              onChange={(event) => {
+                const values = Array.from(event.target.selectedOptions, (option) => option.value);
+                setSelectedTags(values);
+              }}
+              className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              {availableTags.map((tag) => (
+                <option key={tag} value={tag}>{tag}</option>
+              ))}
+            </select>
+          </label>
+          {selectedTags.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {selectedTags.map((tag) => (
+                <Badge key={tag} className="bg-purple-950/60 text-purple-300 border-purple-800 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => toggleTag(tag)}
+                    aria-label={`Remove tag filter ${tag}`}
+                    className="mr-1 text-purple-300 hover:text-purple-100"
+                  >
+                    ×
+                  </button>
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          )}
+        </div>
       </section>
 
       {/* Campaign list — virtualised for 10k+ items */}
@@ -327,7 +422,12 @@ const { campaigns } = useCampaigns();
           <Button
             variant="outline"
             className="mt-4 border-zinc-700 text-zinc-200"
-            onClick={() => { setTreeSpecies("All"); setRegion("All"); }}
+            onClick={() => {
+              setTreeSpecies("All");
+              setRegion("All");
+              setSelectedCategories([]);
+              setSelectedTags([]);
+            }}
           >
             Clear filters
           </Button>

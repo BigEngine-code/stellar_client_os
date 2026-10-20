@@ -191,3 +191,108 @@ export const updateCampaignSchema = z.object({
 
 export type UpdateCampaignFormData = z.infer<typeof updateCampaignSchema>
 
+/**
+ * Primary categories a campaign can be assigned to (issue #1175).
+ * Exposed as a filterable facet on the browse/search page.
+ */
+export const CAMPAIGN_CATEGORIES = [
+  "Tech",
+  "Art",
+  "Social Impact",
+  "Music",
+  "Film",
+  "Games",
+  "Education",
+  "Health",
+  "Environment",
+  "Other",
+] as const
+
+export type CampaignCategory = (typeof CAMPAIGN_CATEGORIES)[number]
+
+/** Maximum number of custom tags a campaign may carry. */
+export const MAX_CAMPAIGN_TAGS = 10
+/** Maximum number of funding milestones a campaign may define. */
+export const MAX_CAMPAIGN_MILESTONES = 10
+
+/**
+ * Schema for a single funding milestone (issue #1171).
+ * `percentage` is an integer between 1 and 100; `amount` is optional and,
+ * when provided, must be a positive token amount.
+ */
+export const campaignMilestoneSchema = z.object({
+  label: z
+    .string()
+    .trim()
+    .min(1, "Milestone label is required")
+    .max(80, "Milestone label cannot exceed 80 characters"),
+  percentage: z
+    .number({ invalid_type_error: "Percentage must be a number" })
+    .int("Percentage must be a whole number")
+    .min(1, "Percentage must be at least 1")
+    .max(100, "Percentage cannot exceed 100"),
+  amount: z
+    .string()
+    .trim()
+    .refine((val) => val === "" || (parseFloat(val) > 0 && TOKEN_AMOUNT_REGEX.test(val)), {
+      message: "Amount must be a positive number with at most 7 decimal places",
+    })
+    .optional(),
+})
+
+export type CampaignMilestoneFormData = z.infer<typeof campaignMilestoneSchema>
+
+/**
+ * Schema for the full list of campaign milestones.
+ * Enforces a maximum count and unique percentages.
+ */
+export const campaignMilestonesSchema = z
+  .array(campaignMilestoneSchema)
+  .max(MAX_CAMPAIGN_MILESTONES, `A campaign can define at most ${MAX_CAMPAIGN_MILESTONES} milestones`)
+  .refine(
+    (milestones) => new Set(milestones.map((m) => m.percentage)).size === milestones.length,
+    "Milestone percentages must be unique",
+  )
+
+export type CampaignMilestonesFormData = z.infer<typeof campaignMilestonesSchema>
+
+/** Schema for the campaign's primary category (issue #1175). */
+export const campaignCategorySchema = z.enum(CAMPAIGN_CATEGORIES, {
+  errorMap: () => ({ message: "Please select a valid campaign category" }),
+})
+
+export type CampaignCategoryFormData = z.infer<typeof campaignCategorySchema>
+
+/**
+ * Schema for the campaign's custom tags (issue #1175).
+ * Tags are trimmed, limited to 1-30 characters, deduplicated
+ * case-insensitively, and capped at MAX_CAMPAIGN_TAGS.
+ */
+export const campaignTagsSchema = z
+  .array(
+    z
+      .string()
+      .trim()
+      .min(1, "Tag cannot be empty")
+      .max(30, "Tag cannot exceed 30 characters"),
+  )
+  .max(MAX_CAMPAIGN_TAGS, `A campaign can have at most ${MAX_CAMPAIGN_TAGS} tags`)
+  .refine(
+    (tags) => new Set(tags.map((t) => t.toLowerCase())).size === tags.length,
+    "Tags must be unique",
+  )
+
+export type CampaignTagsFormData = z.infer<typeof campaignTagsSchema>
+
+/**
+ * Combined metadata schema used by the campaign creation wizard to validate
+ * category, tags and funding milestones together.
+ */
+export const campaignMetadataSchema = z.object({
+  category: campaignCategorySchema,
+  tags: campaignTagsSchema,
+  milestones: campaignMilestonesSchema,
+})
+
+export type CampaignMetadataFormData = z.infer<typeof campaignMetadataSchema>
+

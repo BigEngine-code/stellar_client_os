@@ -10,11 +10,15 @@ import { RewardTiersInstalmentCheckout } from "@/components/modules/campaign/ins
 import { InAppSurveyNotificationBanner } from "@/components/modules/campaign/survey/InAppSurveyNotificationBanner";
 import { CreatorSurveyResultsDashboard } from "@/components/modules/campaign/survey/CreatorSurveyResultsDashboard";
 import { StaffPickBadge } from "@/components/modules/campaign/StaffPickBadge";
-
 import { CampaignComplianceDocumentsList } from "@/components/modules/campaign/compliance/CampaignComplianceDocumentsList";
 import { NFTRewardTiersSection } from "@/components/modules/campaign/reward-nft/NFTRewardTiersSection";
 import { RelatedCampaignsShelf } from "@/components/campaign/RelatedCampaignsShelf";
-import { CampaignViewTracker } from "@/components/campaign/CampaignViewTracker";
+// #1196 — Campaign FAQ section
+import { CampaignFaqSection } from "@/components/modules/campaign/CampaignFaqSection";
+// #1206 — Backer messaging (creator only, shown when canManage=true)
+import { BackerMessageComposer } from "@/components/modules/campaign/BackerMessageComposer";
+// #1207 — Campaign boost purchase (creator only)
+import { CampaignBoostPurchase } from "@/components/modules/campaign/CampaignBoostPurchase";
 
 export const runtime = "nodejs";
 
@@ -138,6 +142,24 @@ export default async function CampaignPage({
         campaignId={campaign.id}
         creatorAddress={campaign.creatorAddress}
         campaignStatus={campaign.status}
+      />
+
+      {/* #1196 — Campaign FAQ section editable by creator */}
+      <CampaignFaqSection
+        campaignId={campaign.id}
+        isCreator={true}
+      />
+
+      {/* #1206 — Backer messaging composer (visible to creator) */}
+      <BackerMessageComposer
+        campaignId={campaign.id}
+        creatorAddress={campaign.creatorAddress}
+      />
+
+      {/* #1207 — Campaign boost / paid promotion */}
+      <CampaignBoostPurchase
+        campaignId={campaign.id}
+        creatorAddress={campaign.creatorAddress}
       />
 
       {/* Horizontally Scrollable Related Campaigns Shelf */}
