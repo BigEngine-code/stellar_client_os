@@ -36,6 +36,7 @@ import { CampaignAnalyticsDashboard } from "@/components/modules/campaign/analyt
 import { BackerCommunity } from "@/components/modules/campaign/community/BackerCommunity";
 import { CampaignFollowButton } from "@/components/modules/campaign/follow/CampaignFollowButton";
 import { TopBackers } from "@/components/modules/campaign/backers/TopBackers";
+import { BackerExclusiveContent } from "@/components/modules/campaign/exclusive-content/BackerExclusiveContent";
 import { CampaignReviews } from "@/components/modules/campaign/reviews/CampaignReviews";
 import { MilestoneFundRelease } from "@/components/modules/campaign/milestones/MilestoneFundRelease";
 import { TOP_BACKERS_LIMIT } from "@/types/campaign-backers";
@@ -855,6 +856,15 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
               <BackerCommunity campaignId={campaign.id} canManage={isCreatorView} />
             </div>
           </div>
+
+          {/* Backer-only exclusive content area (#1267) */}
+          <BackerExclusiveContent
+            campaignId={campaign.id}
+            campaignTitle={campaign.title}
+            creatorAddress={campaign.creator}
+            viewerAddress={viewerAddress}
+            canManage={isCreatorView}
+          />
 
           {/* Backer testimonials & star ratings (#1250) */}
           <CampaignReviews campaignId={campaign.id} viewerAddress={viewerAddress} />
