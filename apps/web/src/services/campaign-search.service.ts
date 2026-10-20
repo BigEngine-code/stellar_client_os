@@ -13,6 +13,8 @@ export interface CampaignSearchQuery {
   maxDaysRemaining?: number;
   species?: string;
   creator?: string;
+  categories?: string[];
+  tags?: string[];
   limit?: number;
   offset?: number;
 }
@@ -142,8 +144,8 @@ export class InMemoryCampaignSearchProvider implements CampaignSearchProvider {
     const category = query.category?.trim();
     const species = query.species?.trim().toLowerCase();
     const creator = query.creator?.trim().toLowerCase();
-    const minGoalAmount = parseAmount(query.minGoalAmount);
-    const maxGoalAmount = parseAmount(query.maxGoalAmount);
+    const categories = (query.categories ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean);
+    const tags = (query.tags ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean);
     const campaigns = await this.source.getCampaigns();
     const now = Date.now();
 
@@ -153,11 +155,10 @@ export class InMemoryCampaignSearchProvider implements CampaignSearchProvider {
         if (category && !matchesCategory(campaign, category)) return false;
         if (species && !speciesValues(campaign).some((item) => item.toLowerCase().includes(species))) return false;
         if (creator && !campaign.creator.toLowerCase().includes(creator)) return false;
-        if (minGoalAmount !== null && goalAmountOf(campaign) < minGoalAmount) return false;
-        if (maxGoalAmount !== null && goalAmountOf(campaign) > maxGoalAmount) return false;
-        if (query.maxDaysRemaining !== undefined) {
-          const remaining = campaignDaysRemaining(campaign, now);
-          if (remaining === undefined || remaining < 0 || remaining > query.maxDaysRemaining) return false;
+        if (categories.length > 0 && !categories.includes((campaign.category ?? "").toLowerCase())) return false;
+        if (tags.length > 0) {
+          const campaignTags = (campaign.tags ?? []).map((tag) => tag.toLowerCase());
+          if (!tags.some((tag) => campaignTags.includes(tag))) return false;
         }
         const words = documentTokens(campaign);
         return requested.every((term) => words.some((word) => word.includes(term)));
@@ -194,7 +195,17 @@ export class ElasticsearchCampaignSearchProvider implements CampaignSearchProvid
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        query: { multi_match: { query: query.query, fields: ["name^3", "description", "location^2", "speciesTags", "species", "treeSpecies", "creator"] } },
+        query: {
+          bool: {
+            must: [
+              { multi_match: { query: query.query, fields: ["name^3", "description", "location^2", "category^2", "tags", "speciesTags", "species", "treeSpecies", "creator"] } },
+            ],
+            filter: [
+              ...(query.categories && query.categories.length > 0 ? [{ terms: { category: query.categories } }] : []),
+              ...(query.tags && query.tags.length > 0 ? [{ terms: { tags: query.tags } }] : []),
+            ],
+          },
+        },
         size: Math.min(Math.max(query.limit ?? 20, 1), 100),
         from: Math.max(query.offset ?? 0, 0),
       }),
