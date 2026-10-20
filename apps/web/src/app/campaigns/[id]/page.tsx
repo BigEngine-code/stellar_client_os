@@ -36,6 +36,7 @@ export default async function CampaignPage({
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-10">
+      <CampaignViewTracker campaignId={campaign.id} />
       <InAppSurveyNotificationBanner campaignId={campaign.id} />
       <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
         <div className="flex items-center gap-2">

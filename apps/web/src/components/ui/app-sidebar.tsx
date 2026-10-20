@@ -34,6 +34,11 @@ const items = [
     icon: <TreePine aria-hidden="true" className="text-emerald-400 size-5" />,
   },
   {
+    title: "Recommendation Preferences",
+    url: "/settings/recommendations",
+    icon: <SlidersHorizontal aria-hidden="true" className="text-white size-5" />,
+  },
+  {
     title: "Campaigns",
     url: "/campaigns",
     icon: <BookIcon aria-hidden="true" />,
@@ -116,6 +121,11 @@ const mobileItems = [
     title: "Profile",
     url: "/profile",
     icon: <TreePine aria-hidden="true" className="text-emerald-400 size-5" />,
+  },
+  {
+    title: "Preferences",
+    url: "/settings/recommendations",
+    icon: <SlidersHorizontal aria-hidden="true" className="text-white size-5" />,
   },
   {
     title: "Distribute",
