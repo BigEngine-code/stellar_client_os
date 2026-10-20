@@ -5,6 +5,8 @@ export interface CampaignSearchQuery {
   location?: string;
   species?: string;
   creator?: string;
+  categories?: string[];
+  tags?: string[];
   limit?: number;
   offset?: number;
 }
@@ -36,6 +38,8 @@ function documentTokens(campaign: CampaignRecord): string[] {
     campaign.description,
     campaign.location,
     campaign.creator,
+    campaign.category,
+    ...(campaign.tags ?? []),
     ...speciesValues(campaign),
   ].join(" "));
 }
@@ -53,6 +57,8 @@ export class InMemoryCampaignSearchProvider implements CampaignSearchProvider {
     const location = query.location?.trim().toLowerCase();
     const species = query.species?.trim().toLowerCase();
     const creator = query.creator?.trim().toLowerCase();
+    const categories = (query.categories ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean);
+    const tags = (query.tags ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean);
     const campaigns = await this.source.getCampaigns();
 
     return campaigns
@@ -60,15 +66,20 @@ export class InMemoryCampaignSearchProvider implements CampaignSearchProvider {
         if (location && !(campaign.location ?? "").toLowerCase().includes(location)) return false;
         if (species && !speciesValues(campaign).some((item) => item.toLowerCase().includes(species))) return false;
         if (creator && !campaign.creator.toLowerCase().includes(creator)) return false;
+        if (categories.length > 0 && !categories.includes((campaign.category ?? "").toLowerCase())) return false;
+        if (tags.length > 0) {
+          const campaignTags = (campaign.tags ?? []).map((tag) => tag.toLowerCase());
+          if (!tags.some((tag) => campaignTags.includes(tag))) return false;
+        }
         const words = documentTokens(campaign);
         return requested.every((term) => words.some((word) => word.includes(term)));
       })
       .map((campaign) => {
         const text = documentTokens(campaign).join(" ");
         const matched = requested.filter((term) => text.includes(term));
-        const highlights = [campaign.name, campaign.location, ...speciesValues(campaign)].filter((value): value is string => Boolean(value)).filter((value) =>
-          requested.some((term) => value.toLowerCase().includes(term)),
-        );
+        const highlights = [campaign.name, campaign.location, campaign.category, ...(campaign.tags ?? []), ...speciesValues(campaign)]
+          .filter((value): value is string => Boolean(value))
+          .filter((value) => requested.some((term) => value.toLowerCase().includes(term)));
         return { campaign, score: matched.length / Math.max(requested.length, 1), highlights };
       })
       .sort((a, b) => b.score - a.score || b.campaign.updatedAt - a.campaign.updatedAt)
@@ -85,7 +96,17 @@ export class ElasticsearchCampaignSearchProvider implements CampaignSearchProvid
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        query: { multi_match: { query: query.query, fields: ["name^3", "description", "location^2", "speciesTags", "species", "treeSpecies", "creator"] } },
+        query: {
+          bool: {
+            must: [
+              { multi_match: { query: query.query, fields: ["name^3", "description", "location^2", "category^2", "tags", "speciesTags", "species", "treeSpecies", "creator"] } },
+            ],
+            filter: [
+              ...(query.categories && query.categories.length > 0 ? [{ terms: { category: query.categories } }] : []),
+              ...(query.tags && query.tags.length > 0 ? [{ terms: { tags: query.tags } }] : []),
+            ],
+          },
+        },
         size: Math.min(Math.max(query.limit ?? 20, 1), 100),
         from: Math.max(query.offset ?? 0, 0),
       }),

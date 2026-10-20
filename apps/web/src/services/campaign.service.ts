@@ -1,4 +1,4 @@
-import { MILESTONE_PERCENTAGES } from "../lib/campaign-milestones";
+import { MILESTONE_PERCENTAGES, evaluateMilestones } from "../lib/campaign-milestones";
 import type { VerificationAuditEntry, VerificationEvidence } from "@/types/campaign-verification";
 import { EmailService, type SendEmailOptions } from "./email.service";
 import {
@@ -14,6 +14,37 @@ import type { CampaignWebhookEvent } from "@/types/webhook";
 import type { CampaignLocalizedContent } from "@/lib/translation";
 
 export type CampaignStatus = "DRAFT" | "PENDING_VERIFICATION" | "ACTIVE" | "PAUSED" | "COMPLETED" | "FAILED";
+
+/** Primary category a campaign can be filed under for browse/search facets. */
+export const CAMPAIGN_CATEGORIES = [
+  "Tech",
+  "Art",
+  "Social Impact",
+  "Environment",
+  "Education",
+  "Health",
+  "Community",
+  "Other",
+] as const;
+
+export type CampaignCategory = (typeof CAMPAIGN_CATEGORIES)[number];
+
+/** Maximum number of custom tags a campaign creator may attach. */
+export const MAX_CAMPAIGN_TAGS = 10;
+
+/**
+ * A creator-defined funding milestone. `percentage` is the fraction of the goal
+ * (0–100) at which the milestone fires; `amount` is an optional explicit target
+ * that takes precedence when present. `notifiedAt` records when the milestone
+ * notification was dispatched so it is only ever sent once.
+ */
+export interface CampaignMilestone {
+  id: string;
+  label: string;
+  percentage: number;
+  amount?: string;
+  notifiedAt?: number;
+}
 
 export type CampaignSortField =
   | "createdAt"
@@ -191,7 +222,11 @@ export interface CampaignRecord {
   region?: string;
   /** Intended campaign duration in milliseconds, used for duplicate detection. */
   /** Optional campaign category (e.g., Environmental & Reforestation). */
-  category?: string;
+  category?: CampaignCategory | string;
+  /** Custom searchable tags (max {@link MAX_CAMPAIGN_TAGS}). */
+  tags?: string[];
+  /** Creator-defined funding milestones with automated notifications. */
+  milestones?: CampaignMilestone[];
   durationMs?: number;
   status: CampaignStatus;
   goalAmount: string;
@@ -251,7 +286,8 @@ export interface CampaignRecord {
   stretchGoals?: import("./campaign-stretch-goals.service").StretchGoal[];
   /** Funding-percentage milestones already emailed to the creator. */
   /** Funding milestones (e.g. 25, 50, 75, 100) that have already triggered a
-   * creator notification for this campaign (issue #793). */
+   * creator notification for this campaign (issue #793). Retained for
+   * backwards compatibility alongside creator-defined {@link milestones}. */
   milestonesNotified?: number[];
   /** Per-campaign sponsor/creator notification preferences (issue #1018). */
   notificationPreferences?: CampaignNotificationPreference[];
@@ -315,6 +351,10 @@ export interface CampaignFilter {
   createdAfter?: number;
   createdBefore?: number;
   isStaffPick?: boolean;
+  /** Multi-category facet filter (issue #1175). */
+  categories?: CampaignCategory[];
+  /** Tag facet filter; a campaign matches when it carries any listed tag. */
+  tags?: string[];
 }
 
 export interface CampaignQueryInput {
@@ -728,7 +768,19 @@ export async function recordCampaignContribution(
   );
 
   const notified = campaign.milestonesNotified ?? [];
-  const newlyReached = reached.filter((percentage) => !notified.includes(percentage));
+
+  // Prefer creator-defined milestones when present; otherwise fall back to the
+  // hard-coded 25/50/75/100 schedule (issue #1171).
+  const customMilestones = campaign.milestones ?? [];
+  const useCustomMilestones = customMilestones.length > 0;
+  const crossedCustomMilestones = useCustomMilestones
+    ? evaluateMilestones(customMilestones, previousRaised, newRaised, campaign.goalAmount)
+    : [];
+  const newlyCrossedCustom = crossedCustomMilestones.filter((milestone) => milestone.notifiedAt === undefined);
+
+  const newlyReached = useCustomMilestones
+    ? newlyCrossedCustom.map((milestone) => milestone.percentage)
+    : reached.filter((percentage) => !notified.includes(percentage));
 
   if (newlyReached.length > 0 && campaign.creatorEmail && !campaign.notificationPreferences?.length) {
     // Build impact metrics to include in every milestone email (#983).
@@ -743,9 +795,14 @@ export async function recordCampaignContribution(
       location: campaign.location,
     };
     for (const percentage of newlyReached) {
+      const label = useCustomMilestones
+        ? newlyCrossedCustom.find((milestone) => milestone.percentage === percentage)?.label
+        : undefined;
       await emailService.sendEmail({
         to: campaign.creatorEmail,
-        subject: `${campaign.name} reached ${percentage}% of its goal`,
+        subject: label
+          ? `${campaign.name}: ${label} reached`
+          : `${campaign.name} reached ${percentage}% of its goal`,
         html: milestoneEmailHtml(campaign.name, percentage, impactMetrics),
       });
     }
@@ -762,10 +819,19 @@ export async function recordCampaignContribution(
     for (const push of dispatch.pushes) await options.pushNotifier.sendPush(push);
   }
 
+  const updatedMilestones = useCustomMilestones
+    ? customMilestones.map((milestone) =>
+        newlyCrossedCustom.some((crossed) => crossed.id === milestone.id)
+          ? { ...milestone, notifiedAt: now }
+          : milestone,
+      )
+    : campaign.milestones;
+
   const updated: CampaignRecord = {
     ...campaign,
     raisedAmount: newRaised.toString(),
-    milestonesNotified: [...notified, ...newlyReached],
+    milestonesNotified: [...new Set([...notified, ...newlyReached])],
+    milestones: updatedMilestones,
     notificationPreferences: dispatch.updatedPreferences,
     updatedAt: now,
   };
@@ -799,7 +865,9 @@ export async function createCampaign(input: {
   location?: string;
   countries?: string[];
   speciesTags?: string[];
-  category?: string;
+  category?: CampaignCategory | string;
+  tags?: string[];
+  milestones?: CampaignMilestone[];
   region?: string;
   treeSpecies?: string;
 /** GPS coordinates of the campaign's planting site(s), stored for the global
@@ -844,6 +912,8 @@ export async function createCampaign(input: {
     countries: input.countries,
     speciesTags: input.speciesTags ?? [],
     category: input.category,
+    tags: input.tags ? [...new Set(input.tags)].slice(0, MAX_CAMPAIGN_TAGS) : [],
+    milestones: input.milestones ? input.milestones.map((milestone) => ({ ...milestone })) : [],
     region: input.region,
     treeSpecies: input.treeSpecies,
 gpsLocations: input.gpsLocations,
@@ -998,8 +1068,13 @@ export async function queryCampaigns(input: CampaignQueryInput = {}, dataSource 
     if (filter.minGoalAmount && BigInt(campaign.goalAmount) < BigInt(filter.minGoalAmount)) return false;
     if (filter.maxGoalAmount && BigInt(campaign.goalAmount) > BigInt(filter.maxGoalAmount)) return false;
     if (filter.isStaffPick !== undefined && Boolean(campaign.isStaffPick) !== filter.isStaffPick) return false;
+    if (filter.categories?.length && !filter.categories.includes(campaign.category as CampaignCategory)) return false;
+    if (filter.tags?.length) {
+      const campaignTags = new Set((campaign.tags ?? []).map((tag) => tag.toLowerCase()));
+      if (!filter.tags.some((tag) => campaignTags.has(tag.toLowerCase()))) return false;
+    }
     if (filter.search) {
-      const haystack = `${campaign.id} ${campaign.name} ${campaign.description ?? ""} ${campaign.creator} ${campaign.language ?? ""} ${campaign.translations ? Object.values(campaign.translations).join(" ") : ""}`.toLowerCase();
+      const haystack = `${campaign.id} ${campaign.name} ${campaign.description ?? ""} ${campaign.creator} ${campaign.language ?? ""} ${campaign.category ?? ""} ${(campaign.tags ?? []).join(" ")} ${campaign.translations ? Object.values(campaign.translations).join(" ") : ""}`.toLowerCase();
       if (!haystack.includes(filter.search.toLowerCase())) return false;
     }
     return true;
