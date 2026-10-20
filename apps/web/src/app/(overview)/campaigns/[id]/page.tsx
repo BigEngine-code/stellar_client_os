@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, use } from "react";
+import React, { useState, use, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -26,15 +26,18 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { CampaignARVisualizer } from "@/components/modules/campaign/ar/CampaignARVisualizer";
+import CampaignARViewer from "@/components/modules/campaigns/CampaignARViewer";
 import { CampaignSponsorWall } from "@/components/modules/campaign/sponsor-wall/CampaignSponsorWall";
 import { CampaignCollaboration } from "@/components/modules/campaign/collaboration/CampaignCollaboration";
 import { CampaignMilestones } from "@/components/modules/campaign/CampaignMilestones";
 import { CampaignQAModeration } from "@/components/modules/campaign/qa/CampaignQAModeration";
+import { CampaignLiveQASession } from "@/components/modules/campaign/qa/CampaignLiveQASession";
 import { CampaignSeries } from "@/components/modules/campaign/series/CampaignSeries";
 import { CampaignAnalyticsDashboard } from "@/components/modules/campaign/analytics/CampaignAnalyticsDashboard";
 import { BackerCommunity } from "@/components/modules/campaign/community/BackerCommunity";
 import { CampaignFollowButton } from "@/components/modules/campaign/follow/CampaignFollowButton";
 import { TopBackers } from "@/components/modules/campaign/backers/TopBackers";
+import { BackerExclusiveContent } from "@/components/modules/campaign/exclusive-content/BackerExclusiveContent";
 import { CampaignReviews } from "@/components/modules/campaign/reviews/CampaignReviews";
 import { MilestoneFundRelease } from "@/components/modules/campaign/milestones/MilestoneFundRelease";
 import { TOP_BACKERS_LIMIT } from "@/types/campaign-backers";
@@ -42,10 +45,12 @@ import { CampaignFundingVelocityChart } from "@/components/modules/campaign/Fund
 import { FundingCounter } from "@/components/modules/campaign/FundingCounter";
 import { CampaignAccessibilityControls } from "@/components/modules/campaign/CampaignAccessibilityControls";
 import { CampaignImpactCalculator } from "@/components/modules/impact/CampaignImpactCalculator";
+import { BackerRoiCalculator } from "@/components/modules/campaign/roi/BackerRoiCalculator";
 import { CampaignFollow } from "@/components/modules/campaign/CampaignFollow";
 import { VerificationMediaGallery, type VerificationMediaItem } from "@/components/modules/campaign/VerificationMediaGallery";
 import { CO2SequestrationProjection } from "@/components/modules/dashboard/CO2SequestrationProjection";
 import { CampaignSustainabilityScore } from "@/components/modules/campaign/sustainability/CampaignSustainabilityScore";
+import { SustainabilityScoreBadge } from "@/components/modules/campaign/sustainability/SustainabilityScoreBadge";
 import { OneTimeDonationButton } from "@/components/modules/campaign/donation/OneTimeDonationButton";
 import { CampaignCharityBadge } from "@/components/modules/campaign/CharityBadge";
 import { StaffPickBadge } from "@/components/modules/campaign/StaffPickBadge";
@@ -295,8 +300,135 @@ const detectLanguage = (text: string): string => {
   return "en";
 };
 
+export interface CampaignMilestone {
+  id: string;
+  label: string;
+  /** Milestone threshold as a percentage of the funding goal (0-100). */
+  percentage: number;
+}
+
+export const DEFAULT_CAMPAIGN_MILESTONES: CampaignMilestone[] = [
+  { id: "milestone-25", label: "25%", percentage: 25 },
+  { id: "milestone-50", label: "50%", percentage: 50 },
+  { id: "milestone-75", label: "75%", percentage: 75 },
+  { id: "milestone-100", label: "100%", percentage: 100 },
+];
+
+interface MilestoneProgressBarProps {
+  milestones?: CampaignMilestone[];
+  raisedAmount: string | number;
+  goalAmount: string | number;
+  token?: string;
+}
+
+function parseAmount(value: string | number): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const parsed = Number.parseFloat(value.replace(/,/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function MilestoneProgressBar({
+  milestones,
+  raisedAmount,
+  goalAmount,
+  token = "XLM",
+}: MilestoneProgressBarProps) {
+  const goal = parseAmount(goalAmount);
+  const raised = parseAmount(raisedAmount);
+  const progressPct = goal > 0 ? Math.min(100, Math.max(0, (raised / goal) * 100)) : 0;
+
+  const sortedMilestones = React.useMemo(
+    () =>
+      [...(milestones && milestones.length > 0 ? milestones : DEFAULT_CAMPAIGN_MILESTONES)].sort(
+        (a, b) => a.percentage - b.percentage
+      ),
+    [milestones]
+  );
+
+  const nextMilestone = sortedMilestones.find((milestone) => progressPct < milestone.percentage);
+  const achievedCount = sortedMilestones.filter((milestone) => progressPct >= milestone.percentage).length;
+
+  return (
+    <section
+      aria-label="Campaign milestone progress"
+      className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-4"
+    >
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-purple-400">Funding Milestones</h3>
+        <span className="text-[11px] text-zinc-400">
+          {achievedCount} / {sortedMilestones.length} reached
+        </span>
+      </div>
+
+      <div className="relative pt-6 pb-8">
+        {/* Track */}
+        <div className="relative h-2 w-full overflow-hidden rounded-full bg-zinc-800">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-purple-500 via-indigo-500 to-emerald-400 transition-all duration-500"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+
+        {/* Milestone markers */}
+        {sortedMilestones.map((milestone) => {
+          const achieved = progressPct >= milestone.percentage;
+          const isNext = nextMilestone?.id === milestone.id;
+          return (
+            <div
+              key={milestone.id}
+              className="absolute top-0 flex -translate-x-1/2 flex-col items-center"
+              style={{ left: `${Math.min(100, Math.max(0, milestone.percentage))}%` }}
+            >
+              <span
+                role="img"
+                aria-label={`${milestone.label} milestone ${achieved ? "reached" : "not reached"}`}
+                className={`h-3 w-3 rounded-full border-2 transition-colors ${
+                  achieved
+                    ? "border-emerald-400 bg-emerald-400"
+                    : isNext
+                      ? "border-purple-400 bg-zinc-900 ring-2 ring-purple-500/40"
+                      : "border-zinc-600 bg-zinc-900"
+                }`}
+              />
+              <span
+                className={`mt-1 whitespace-nowrap text-[10px] font-semibold ${
+                  achieved ? "text-emerald-400" : isNext ? "text-purple-300" : "text-zinc-500"
+                }`}
+              >
+                {milestone.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="text-xs text-zinc-400" aria-live="polite">
+        {nextMilestone ? (
+          <>
+            Next milestone: <strong className="text-purple-300">{nextMilestone.label}</strong>{" "}
+            ({nextMilestone.percentage}% of goal)
+          </>
+        ) : (
+          <span className="text-emerald-400 font-semibold">All milestones reached — goal achieved!</span>
+        )}
+      </p>
+
+      <p className="text-[11px] text-zinc-500">
+        {raised.toLocaleString()} / {goal.toLocaleString()} {token} raised ({Math.round(progressPct)}%)
+      </p>
+    </section>
+  );
+}
+
 export default function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  useEffect(() => {
+    const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]') ?? document.createElement("link");
+    canonical.rel = "canonical";
+    canonical.href = `${window.location.origin}/campaigns/${encodeURIComponent(id)}`;
+    if (!canonical.parentNode) document.head.appendChild(canonical);
+    return () => canonical.remove();
+  }, [id]);
   const [activeTab, setActiveTab] = useState("overview");
   const [showInsuranceModal, setShowInsuranceModal] = useState(false);
   const [claimSubmitted, setClaimSubmitted] = useState(false);
@@ -344,6 +476,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
     isStaffPick: true,
     staffPickReason: "Outstanding community guardianship and verifiable canopy restoration.",
     isComingSoon: true,
+    milestones: DEFAULT_CAMPAIGN_MILESTONES,
   };
 
   const sustainabilityScore = React.useMemo(
@@ -629,6 +762,14 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
               <Heart className="mr-2 h-4 w-4 fill-white" /> Sponsor This Campaign
             </Button>
 
+            {/* Milestone progress bar with markers for each funding milestone */}
+            <MilestoneProgressBar
+              milestones={campaign.milestones}
+              raisedAmount={campaign.raisedAmount}
+              goalAmount={campaign.goalAmount}
+              token={campaign.token}
+            />
+
             {/* Follow for updates without sponsoring (#942 v1) */}
             <CampaignFollowButton campaignId={campaign.id} />
           </div>
@@ -734,6 +875,9 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
                 readOnly
               />
 
+              {/* Backer ROI estimate for revenue-share / equity campaigns (#1244); hidden otherwise. */}
+              <BackerRoiCalculator campaignId={campaign.id} />
+
               <VerificationMediaGallery items={verificationMedia} />
 
               <CO2SequestrationProjection
@@ -768,6 +912,15 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
               <BackerCommunity campaignId={campaign.id} canManage={isCreatorView} />
             </div>
           </div>
+
+          {/* Backer-only exclusive content area (#1267) */}
+          <BackerExclusiveContent
+            campaignId={campaign.id}
+            campaignTitle={campaign.title}
+            creatorAddress={campaign.creator}
+            viewerAddress={viewerAddress}
+            canManage={isCreatorView}
+          />
 
           {/* Backer testimonials & star ratings (#1250) */}
           <CampaignReviews campaignId={campaign.id} viewerAddress={viewerAddress} />
@@ -813,6 +966,12 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
 
         {/* Tab 5: Q&A Moderation (#791) */}
         <TabsContent value="qa">
+          <CampaignLiveQASession
+            campaignId={campaign.id}
+            creatorAddress={campaign.creator}
+            viewerAddress={viewerAddress}
+            isCreator={isCreatorView}
+          />
           <CampaignQAModeration campaignId={campaign.id} campaignTitle={campaign.title} />
         </TabsContent>
 
