@@ -51,7 +51,74 @@ export type DonationErrorCode =
   | "INVALID_AMOUNT"
   | "INVALID_TOKEN"
   | "INVALID_DONOR"
-  | "MESSAGE_TOO_LONG";
+  | "MESSAGE_TOO_LONG"
+  | "UNSUPPORTED_CURRENCY";
+
+/** Currencies a backer may pledge in (issue #1170). */
+export const SUPPORTED_DONATION_CURRENCIES = ["USD", "EUR", "XLM", "USDC"] as const;
+
+export type DonationCurrency = (typeof SUPPORTED_DONATION_CURRENCIES)[number];
+
+export function isDonationCurrency(value: unknown): value is DonationCurrency {
+  return typeof value === "string" && (SUPPORTED_DONATION_CURRENCIES as readonly string[]).includes(value);
+}
+
+/** Number of decimal places conversion rates and converted amounts are rounded to. */
+export const CONVERSION_DECIMALS = 7;
+
+/**
+ * A conversion quote captured at pledge time. `rate` is the multiplier applied
+ * to the original amount to obtain the converted amount, rounded to
+ * `CONVERSION_DECIMALS` places.
+ */
+export interface ConversionQuote {
+  originalCurrency: DonationCurrency;
+  convertedCurrency: DonationCurrency;
+  originalAmount: string;
+  convertedAmount: string;
+  rate: string;
+  /** Epoch milliseconds at which the rate was captured. */
+  quotedAt: number;
+}
+
+/** Supplies the exchange rate between two supported currencies. */
+export interface ConversionRateProvider {
+  getRate(from: DonationCurrency, to: DonationCurrency, at: number): number;
+}
+
+/**
+ * Default rate provider. Rates are expressed relative to USD and are static
+ * placeholders until a live oracle is wired in; `getRate` still returns a
+ * timestamped quote so callers can display when the rate was captured.
+ */
+export class StaticConversionRateProvider implements ConversionRateProvider {
+  constructor(private readonly usdRates: Record<DonationCurrency, number> = DEFAULT_USD_RATES) {}
+
+  getRate(from: DonationCurrency, to: DonationCurrency, _at: number): number {
+    const fromRate = this.usdRates[from];
+    const toRate = this.usdRates[to];
+    if (!fromRate || !toRate) {
+      throw new Error(`No conversion rate for ${from} -> ${to}.`);
+    }
+    return fromRate / toRate;
+  }
+}
+
+/** Units of each currency per 1 USD. */
+export const DEFAULT_USD_RATES: Record<DonationCurrency, number> = {
+  USD: 1,
+  EUR: 0.92,
+  XLM: 8.5,
+  USDC: 1,
+};
+
+/** Round a numeric amount to `CONVERSION_DECIMALS` places, returned as a string. */
+export function roundConversionAmount(value: number): string {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error("Conversion amount must be a non-negative finite number.");
+  }
+  return value.toFixed(CONVERSION_DECIMALS);
+}
 
 export interface CreateDonationInput {
   campaignId: string;
@@ -66,6 +133,10 @@ export interface CreateDonationInput {
   txHash?: string;
   /** Caller-supplied key that makes retries safe: a repeat call returns the original donation. */
   idempotencyKey?: string;
+  /** Currency the backer pledged in (issue #1170). Defaults to the pledge token. */
+  originalCurrency?: string;
+  /** Currency the pledge is converted to. Defaults to the original currency. */
+  convertedCurrency?: string;
 }
 
 export type DonationResult =
@@ -90,8 +161,42 @@ export class CampaignDonationService {
 
   private readonly milestoneEmailService: CampaignMilestoneEmailService;
 
-  constructor(private readonly emailService: CampaignEmailer = new EmailService()) {
+  constructor(
+    private readonly emailService: CampaignEmailer = new EmailService(),
+    private readonly rateProvider: ConversionRateProvider = new StaticConversionRateProvider(),
+  ) {
     this.milestoneEmailService = new CampaignMilestoneEmailService(emailService);
+  }
+
+  /**
+   * Produce a timestamped conversion quote for a pledge (issue #1170).
+   *
+   * Returns `null` when either currency is unsupported or the amount is
+   * invalid so the UI can show an inline error before confirmation.
+   */
+  quoteConversion(
+    originalCurrency: string,
+    convertedCurrency: string,
+    amount: string | number,
+    now: number = Date.now(),
+  ): ConversionQuote | null {
+    if (!isDonationCurrency(originalCurrency) || !isDonationCurrency(convertedCurrency)) {
+      return null;
+    }
+    if (validateDonationAmount(amount)) {
+      return null;
+    }
+    const originalAmount = normalizeDonationAmount(amount) as string;
+    const rate = this.rateProvider.getRate(originalCurrency, convertedCurrency, now);
+    const convertedAmount = roundConversionAmount(Number(originalAmount) * rate);
+    return {
+      originalCurrency,
+      convertedCurrency,
+      originalAmount,
+      convertedAmount,
+      rate: roundConversionAmount(rate),
+      quotedAt: now,
+    };
   }
 
   private idempotencyKey(campaignId: string, key: string): string {
@@ -147,6 +252,36 @@ export class CampaignDonationService {
       return { ok: false, error: amountError, code: "INVALID_AMOUNT" };
     }
     const amount = normalizeDonationAmount(input.amount) as string;
+
+    // Resolve the pledge currencies (issue #1170). When omitted they default to
+    // the pledge token so existing callers keep working unchanged.
+    const originalCurrency = input.originalCurrency?.trim() || token;
+    const convertedCurrency = input.convertedCurrency?.trim() || originalCurrency;
+    if (!isDonationCurrency(originalCurrency) || !isDonationCurrency(convertedCurrency)) {
+      return {
+        ok: false,
+        error: `Unsupported currency pair: ${originalCurrency} -> ${convertedCurrency}.`,
+        code: "UNSUPPORTED_CURRENCY",
+      };
+    }
+    let quote: ConversionQuote;
+    try {
+      const computed = this.quoteConversion(originalCurrency, convertedCurrency, amount, now);
+      if (!computed) {
+        return {
+          ok: false,
+          error: `Unsupported currency pair: ${originalCurrency} -> ${convertedCurrency}.`,
+          code: "UNSUPPORTED_CURRENCY",
+        };
+      }
+      quote = computed;
+    } catch {
+      return {
+        ok: false,
+        error: `Unsupported currency pair: ${originalCurrency} -> ${convertedCurrency}.`,
+        code: "UNSUPPORTED_CURRENCY",
+      };
+    }
 
     const campaign = await getCampaign(campaignId, dataSource);
     if (!campaign) {
@@ -213,6 +348,12 @@ export class CampaignDonationService {
       status: "CONFIRMED",
       txHash: input.txHash?.trim() || undefined,
       idempotencyKey: idempotencyKey || undefined,
+      originalCurrency: quote.originalCurrency,
+      originalAmount: quote.originalAmount,
+      convertedCurrency: quote.convertedCurrency,
+      convertedAmount: quote.convertedAmount,
+      conversionRate: quote.rate,
+      conversionQuotedAt: quote.quotedAt,
       createdAt: now,
       confirmedAt: now,
     };
@@ -230,6 +371,12 @@ export class CampaignDonationService {
       allocationLabel: DONATION_ALLOCATION_LABEL,
       allocationDescription: DONATION_ALLOCATION_DESCRIPTION,
       status: donation.status,
+      originalCurrency: quote.originalCurrency,
+      originalAmount: quote.originalAmount,
+      convertedCurrency: quote.convertedCurrency,
+      convertedAmount: quote.convertedAmount,
+      conversionRate: quote.rate,
+      conversionQuotedAt: quote.quotedAt,
       issuedAt: now,
     };
 

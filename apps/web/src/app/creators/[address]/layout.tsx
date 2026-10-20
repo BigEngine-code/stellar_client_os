@@ -2,7 +2,7 @@
  * Creator Profile Layout
  * 
  * Provides shared layout for creator pages with navigation between
- * profile and portfolio views.
+ * profile, portfolio, and analytics views.
  */
 
 import { ReactNode } from 'react';
@@ -38,6 +38,12 @@ export default async function CreatorLayout({
               className="px-4 py-4 font-medium text-gray-700 hover:text-gray-900 border-b-2 border-transparent hover:border-green-500 transition-colors"
             >
               Portfolio
+            </Link>
+            <Link
+              href={`/creators/${address}/analytics`}
+              className="px-4 py-4 font-medium text-gray-700 hover:text-gray-900 border-b-2 border-transparent hover:border-green-500 transition-colors"
+            >
+              Analytics
             </Link>
           </div>
         </div>

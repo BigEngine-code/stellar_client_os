@@ -496,6 +496,23 @@ export const typeDefs = /* GraphQL */`
     conversionRate: Float!
   }
 
+  """Supported export formats for the campaign analytics dashboard."""
+  enum AnalyticsExportFormat {
+    CSV
+    PDF
+  }
+
+  """An exported analytics report, base64-encoded for transport."""
+  type CampaignAnalyticsExport {
+    campaignId: ID!
+    format: AnalyticsExportFormat!
+    filename: String!
+    mimeType: String!
+    """Base64-encoded report contents."""
+    payload: String!
+    generatedAt: Int!
+  }
+
   enum GrantProgramStatus {
     OPEN
     PAUSED
@@ -620,6 +637,17 @@ export const typeDefs = /* GraphQL */`
     trends.
     """
     campaignAnalytics(campaignId: ID!, network: Network): CampaignAnalyticsDashboard
+
+    """
+    Export the creator analytics dashboard (traffic sources, conversion
+    funnel, backer demographics, and daily funding trend) as a CSV or PDF
+    report, returned base64-encoded.
+    """
+    campaignAnalyticsExport(
+      campaignId: ID!
+      format: AnalyticsExportFormat = CSV
+      network: Network
+    ): CampaignAnalyticsExport
 
     """
     The platform-funded grant matching programs available to underrepresented
