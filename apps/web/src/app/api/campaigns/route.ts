@@ -90,6 +90,7 @@ async function postCampaign(request: Request) {
       underrepresentedTags?: string[];
       durationMs?: number;
       deadline?: number;
+      countdownEnabled?: boolean;
       goalAmount?: string;
       network?: "testnet" | "mainnet";
       language?: string;
@@ -269,6 +270,8 @@ const description = body.description ?? "";
       durationMs,
       goalAmount: body.goalAmount,
       network: body.network,
+      deadline: body.deadline,
+      countdownEnabled: body.countdownEnabled === true,
       nonprofitPartner,
       language,
       translations,

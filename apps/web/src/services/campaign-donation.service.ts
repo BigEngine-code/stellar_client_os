@@ -24,6 +24,7 @@ import {
 import { EmailService } from "./email.service";
 import type { CampaignEmailer } from "./campaign.service";
 import { buildPledgeThankYouEmail } from "./pledge-thank-you-email.service";
+import { backerBadgeService } from "./backer-badge.service";
 
 /**
  * One-time charitable campaign donations (issue #1001).
@@ -69,6 +70,7 @@ export type DonationResult =
       campaign: CampaignRecord;
       /** Funding milestones the donation pushed the campaign across. */
       milestones: number[];
+      badges: Array<{ key: string; name: string; description: string; icon: string; awardedAt: number }>;
     }
   | { ok: false; error: string; code: DonationErrorCode };
 
@@ -208,6 +210,13 @@ export class CampaignDonationService {
     if (idempotencyKey) {
       this.idempotency.set(this.idempotencyKey(campaignId, idempotencyKey), donation.id);
     }
+    const badges = backerBadgeService.recordPledge({
+      address: donorAddress,
+      campaignId,
+      amount,
+      campaignCreatedAt: recorded.campaign.createdAt,
+      pledgedAt: now,
+    });
 
     if (donorEmail) {
       try {
@@ -230,6 +239,7 @@ export class CampaignDonationService {
       receipt,
       campaign: recorded.campaign,
       milestones: recorded.milestones,
+      badges,
     };
   }
 
