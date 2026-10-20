@@ -13,6 +13,7 @@ import { CO2SequestrationProjection } from "@/components/modules/dashboard/CO2Se
 import { StaffPicksSection } from "@/components/modules/campaign/StaffPicksSection";
 import { SpotlightSection } from "@/components/modules/campaign/SpotlightSection";
 import { BackerNotificationPreferencePanel } from "@/components/modules/dashboard/BackerNotificationPreferencePanel";
+import { WebhookEventLog } from "@/components/modules/dashboard/WebhookEventLog";
 
 const DashboardPage = async () => {
     return (
@@ -22,6 +23,7 @@ const DashboardPage = async () => {
             <SpotlightSection />
             <StaffPicksSection />
             <CreatorStatsDashboard />
+            <WebhookEventLog />
             <CampaignCreatorBadge />
             <MentorshipPanel />
             <ForestReportExport />
