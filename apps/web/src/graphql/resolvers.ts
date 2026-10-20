@@ -53,6 +53,12 @@ function toCampaignPayload(campaign: import("@/services/campaign.service").Campa
 
   return {
     ...campaign,
+    category: campaign.category ?? null,
+    tags: campaign.tags ?? [],
+    milestones: (campaign.milestones ?? []).map((milestone) => ({
+      ...milestone,
+      reachedAt: milestone.reachedAt != null ? Math.floor(milestone.reachedAt / 1000) : null,
+    })),
     verification,
     verificationStatus: verification.status,
     verified: verification.isVerified,
@@ -94,7 +100,13 @@ export function createResolvers(defaultDataSource?: StreamDataSource) {
         ctx: ResolverContext,
       ) => {
         const campaigns = await queryCampaigns({
-          filter: args.filter,
+          filter: args.filter
+            ? {
+                ...args.filter,
+                categories: args.filter.categories,
+                tags: args.filter.tags,
+              }
+            : undefined,
           sort: args.sort,
           limit: args.pagination?.limit,
           offset: args.pagination?.offset,

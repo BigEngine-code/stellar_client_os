@@ -7,6 +7,7 @@ import { Heart, Receipt, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useWallet } from "@/providers/StellarWalletProvider";
+import { PersonalizedCampaignRecommendations } from "@/components/campaign/PersonalizedCampaignRecommendations";
 import {
   DONATION_ALLOCATION_DESCRIPTION,
   DONATION_PRESET_AMOUNTS,
@@ -174,6 +175,10 @@ export function CampaignDonationPanel({
             1% of your donation funds the campaign insurance pool. If trees die within
             two years of planting, sponsors receive an automatic refund from the pool.
           </span>
+        </div>
+
+        <div className="mt-6">
+          <PersonalizedCampaignRecommendations />
         </div>
 
         <Button type="button" variant="outline" className="mt-6" onClick={reset}>

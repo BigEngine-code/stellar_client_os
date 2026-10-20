@@ -10,12 +10,15 @@ import { RewardTiersInstalmentCheckout } from "@/components/modules/campaign/ins
 import { InAppSurveyNotificationBanner } from "@/components/modules/campaign/survey/InAppSurveyNotificationBanner";
 import { CreatorSurveyResultsDashboard } from "@/components/modules/campaign/survey/CreatorSurveyResultsDashboard";
 import { StaffPickBadge } from "@/components/modules/campaign/StaffPickBadge";
-
 import { CampaignComplianceDocumentsList } from "@/components/modules/campaign/compliance/CampaignComplianceDocumentsList";
 import { NFTRewardTiersSection } from "@/components/modules/campaign/reward-nft/NFTRewardTiersSection";
 import { RelatedCampaignsShelf } from "@/components/campaign/RelatedCampaignsShelf";
-import { CampaignCountdown } from "@/components/CampaignCountdown";
-import { StretchGoals } from "@/components/modules/campaign/StretchGoals";
+// #1196 — Campaign FAQ section
+import { CampaignFaqSection } from "@/components/modules/campaign/CampaignFaqSection";
+// #1206 — Backer messaging (creator only, shown when canManage=true)
+import { BackerMessageComposer } from "@/components/modules/campaign/BackerMessageComposer";
+// #1207 — Campaign boost purchase (creator only)
+import { CampaignBoostPurchase } from "@/components/modules/campaign/CampaignBoostPurchase";
 
 export const runtime = "nodejs";
 
@@ -35,6 +38,7 @@ export default async function CampaignPage({
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-10">
+      <CampaignViewTracker campaignId={campaign.id} />
       <InAppSurveyNotificationBanner campaignId={campaign.id} />
       <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
         <div className="flex items-center gap-2">
@@ -143,6 +147,24 @@ export default async function CampaignPage({
         campaignId={campaign.id}
         creatorAddress={campaign.creatorAddress}
         campaignStatus={campaign.status}
+      />
+
+      {/* #1196 — Campaign FAQ section editable by creator */}
+      <CampaignFaqSection
+        campaignId={campaign.id}
+        isCreator={true}
+      />
+
+      {/* #1206 — Backer messaging composer (visible to creator) */}
+      <BackerMessageComposer
+        campaignId={campaign.id}
+        creatorAddress={campaign.creatorAddress}
+      />
+
+      {/* #1207 — Campaign boost / paid promotion */}
+      <CampaignBoostPurchase
+        campaignId={campaign.id}
+        creatorAddress={campaign.creatorAddress}
       />
 
       {/* Horizontally Scrollable Related Campaigns Shelf */}
