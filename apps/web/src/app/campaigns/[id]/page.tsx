@@ -97,6 +97,11 @@ export default async function CampaignPage({
         />
       </section>
 
+      <CampaignRoadmapTimeline phases={((campaign as unknown as { milestones?: Array<{ id: string; title: string; targetDate: string; description: string; completed?: boolean }> }).milestones ?? [])} />
+      <section aria-labelledby="campaign-budget-heading" className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <h2 id="campaign-budget-heading" className="sr-only">Campaign budget breakdown</h2>
+        <CampaignBudgetBreakdown campaignId={campaign.id} />
+      </section>
       {/* Direct Charitable Contribution (#865) */}
       <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
         <div className="mb-4">

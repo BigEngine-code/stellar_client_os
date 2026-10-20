@@ -111,6 +111,8 @@ export const INITIAL_WIZARD_DATA: CampaignWizardData = {
 
   startDate: new Date().toISOString().split("T")[0],
   endDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
+  scheduledPublishAt: "",
+  budgetBreakdown: [],
   milestones: [
     {
       id: "m-1",
@@ -154,6 +156,7 @@ export const goalsSchema = z.object({
 
 export const timelineSchema = z.object({
   startDate: z.string().min(1, "Start date is required"),
+  scheduledPublishAt: z.string().optional(),
   endDate: z.string().min(1, "End date is required"),
 }).refine((data) => new Date(data.endDate) > new Date(data.startDate), {
   message: "End date must be after start date",
