@@ -193,6 +193,8 @@ export interface CampaignRecord {
   /** Optional campaign category (e.g., Environmental & Reforestation). */
   category?: string;
   durationMs?: number;
+  deadline?: number;
+  countdownEnabled?: boolean;
   status: CampaignStatus;
   goalAmount: string;
   raisedAmount: string;
@@ -813,6 +815,7 @@ export async function createCampaign(input: {
   co2SequestrationKg?: string;
   durationMs?: number;
   deadline?: number;
+  countdownEnabled?: boolean;
   goalAmount: string;
   raisedAmount?: string;
   sponsorCount?: number;
@@ -846,7 +849,9 @@ export async function createCampaign(input: {
     category: input.category,
     region: input.region,
     treeSpecies: input.treeSpecies,
-gpsLocations: input.gpsLocations,
+    gpsLocations: input.gpsLocations,
+    deadline: input.deadline,
+    countdownEnabled: input.countdownEnabled,
     underrepresentedTags: input.underrepresentedTags,
     species: input.species,
     treeCount: input.treeCount ?? 0,

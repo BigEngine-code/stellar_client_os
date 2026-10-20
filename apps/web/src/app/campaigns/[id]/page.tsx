@@ -14,6 +14,8 @@ import { StaffPickBadge } from "@/components/modules/campaign/StaffPickBadge";
 import { CampaignComplianceDocumentsList } from "@/components/modules/campaign/compliance/CampaignComplianceDocumentsList";
 import { NFTRewardTiersSection } from "@/components/modules/campaign/reward-nft/NFTRewardTiersSection";
 import { RelatedCampaignsShelf } from "@/components/campaign/RelatedCampaignsShelf";
+import { CampaignCountdown } from "@/components/CampaignCountdown";
+import { StretchGoals } from "@/components/modules/campaign/StretchGoals";
 
 export const runtime = "nodejs";
 
@@ -28,6 +30,8 @@ export default async function CampaignPage({
   const progressPercent = goal > 0n
     ? Math.min(Number((BigInt(campaign.raisedAmount) * 100n) / goal), 100)
     : 0;
+  const deadline = campaign.deadline;
+  const countdownVisible = Boolean(deadline && (campaign.countdownEnabled || deadline - Date.now() <= 7 * 24 * 60 * 60 * 1000));
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-10">
@@ -71,6 +75,9 @@ export default async function CampaignPage({
           />
         </div>
       </section>
+
+      {countdownVisible && deadline && <CampaignCountdown targetDate={deadline} />}
+      <StretchGoals goals={campaign.stretchGoals ?? []} raisedAmount={campaign.raisedAmount} />
 
       {/* Real-time CO2 Sequestration Impact Calculator (#839) */}
       <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
