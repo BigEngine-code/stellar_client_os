@@ -1,14 +1,14 @@
 "use client";
 
-import React, { useMemo, useState, useRef } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import { Rocket, Plus, Heart, Users, ShieldCheck, ChevronRight, Trophy, Scale, ShoppingBag, Trees, MapPin, Megaphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import SuccessStories from "@/components/modules/campaign/success-stories/SuccessStories";
 import { CampaignAccessibilityControls } from "@/components/modules/campaign/CampaignAccessibilityControls";
 import { CampaignSearchPanel } from "@/components/modules/campaign/CampaignSearchPanel";
+import { VirtualizedCampaignGrid } from "@/components/modules/campaign/VirtualizedCampaignGrid";
 import { useCampaigns } from "@/hooks/use-campaigns";
 import { CharityBadge } from "@/components/modules/campaign/CharityBadge";
 import { StaffPickBadge } from "@/components/modules/campaign/StaffPickBadge";
@@ -32,6 +32,10 @@ const CARD_ESTIMATED_HEIGHT_PX = 280;
 // Number of extra rows to render above/below the visible window (overscan).
 // A value of 3 avoids blank flashes when scrolling quickly.
 const OVERSCAN_COUNT = 3;
+
+// Stable key extractor so the virtualiser's measurement cache survives
+// re-renders (a fresh function identity would invalidate it every time).
+const getCampaignKey = (campaign: { id: string }): string => campaign.id;
 
 export default function CampaignsDirectoryPage() {
 const { campaigns } = useCampaigns();
@@ -74,33 +78,6 @@ const { campaigns } = useCampaigns();
       prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag],
     );
   };
-
-  // ---------------------------------------------------------------------------
-  // Virtual scrolling for the campaign list — handles 10k+ campaigns without
-  // performance degradation (issue #914).
-  //
-  // We virtualise a single flat list of items.  For a 2-column layout we pair
-  // adjacent campaigns: item at virtual index `i` renders campaigns at array
-  // indices `i*2` and `i*2+1`.  This keeps the virtualizer API simple while
-  // preserving the existing 2-column grid appearance on medium+ screens.
-  // ---------------------------------------------------------------------------
-  const rowCount = Math.ceil(filteredCampaigns.length / 2);
-
-  // The scrollable container is the full page body; we attach the virtualizer
-  // to a dedicated div wrapper so it does not fight with the outer layout.
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-
-  const virtualizer = useVirtualizer({
-    count: rowCount,
-    getScrollElement: () => scrollContainerRef.current,
-    estimateSize: () => CARD_ESTIMATED_HEIGHT_PX,
-    overscan: OVERSCAN_COUNT,
-    // measureElement is automatically used by TanStack Virtual v3 to record
-    // actual rendered heights, giving smooth scroll position recovery.
-  });
-
-  const virtualItems = virtualizer.getVirtualItems();
-  const totalListHeight = virtualizer.getTotalSize();
 
   return (
     <div className="campaign-accessible container mx-auto px-4 py-8 max-w-6xl space-y-8">
@@ -290,53 +267,27 @@ const { campaigns } = useCampaigns();
          * We cap the visible height at 80 vh so the virtualiser has a finite
          * scroll viewport.  For smaller lists the container shrinks to fit.
          */
-        <div
-          ref={scrollContainerRef}
-          className="overflow-y-auto rounded-xl"
-          style={{ maxHeight: "80vh", minHeight: Math.min(totalListHeight, window?.innerHeight ? window.innerHeight * 0.8 : 600) }}
-          role="list"
-          aria-label="Campaign list"
-        >
-          {/* Inner spacer: sized to the total virtual list height so the
-              browser scrollbar reflects the true content length. */}
-          <div style={{ height: totalListHeight, position: "relative" }}>
-            {virtualItems.map((virtualRow) => {
-              const leftIndex = virtualRow.index * 2;
-              const rightIndex = leftIndex + 1;
-              const leftCampaign = filteredCampaigns[leftIndex];
-              const rightCampaign = filteredCampaigns[rightIndex];
+        <VirtualizedCampaignGrid
+          items={filteredCampaigns}
+          getItemKey={getCampaignKey}
+          minColumnWidth={340}
+          maxColumns={2}
+          initialColumns={2}
+          gap={24}
+          estimateRowHeight={CARD_ESTIMATED_HEIGHT_PX}
+          overscan={OVERSCAN_COUNT}
+          maxHeight="80vh"
+          ariaLabel="Campaign list"
+          renderItem={(c) => {
+            const progress = Math.round(
+              (parseFloat(String(c.raisedAmount).replace(/,/g, "")) /
+                parseFloat(String(c.goalAmount).replace(/,/g, ""))) *
+                100,
+            ) || 0;
+            const wished = isInWishlist(c.id);
 
-              return (
-                <div
-                  key={virtualRow.key}
-                  data-index={virtualRow.index}
-                  ref={virtualizer.measureElement}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    transform: `translateY(${virtualRow.start}px)`,
-                  }}
-                >
-                  {/* Each virtual row renders up to 2 campaign cards in a
-                      responsive 2-column grid, matching the original layout. */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6">
-                    {[leftCampaign, rightCampaign].map((c, slot) => {
-                      if (!c) return null;
-                      const progress = Math.round(
-                        (parseFloat(String(c.raisedAmount).replace(/,/g, "")) /
-                          parseFloat(String(c.goalAmount).replace(/,/g, ""))) *
-                          100,
-                      ) || 0;
-                      const wished = isInWishlist(c.id);
-
-                      return (
-                        <div
-                          key={`${virtualRow.index}-${slot}`}
-                          role="listitem"
-                          className="group flex flex-col justify-between rounded-xl border border-zinc-800 bg-zinc-900/80 p-6 shadow-xl transition-all duration-300 hover:border-purple-500/50 hover:shadow-2xl relative"
-                        >
+            return (
+              <div className="group flex flex-col justify-between rounded-xl border border-zinc-800 bg-zinc-900/80 p-6 shadow-xl transition-all duration-300 hover:border-purple-500/50 hover:shadow-2xl relative">
                           <div className="absolute top-4 right-4 z-10">
                             <Button
                               variant="ghost"
@@ -405,15 +356,10 @@ const { campaigns } = useCampaigns();
                               </Link>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+              </div>
+            );
+          }}
+        />
       ) : (
         <div className="rounded-xl border border-dashed border-zinc-700 px-6 py-12 text-center">
           <Trees className="mx-auto h-8 w-8 text-zinc-500" />
