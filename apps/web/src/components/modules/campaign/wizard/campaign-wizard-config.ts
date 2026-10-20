@@ -67,6 +67,7 @@ export interface CampaignWizardData {
   shortDescription: string;
   fullStory: string;
   imageUrl: string;
+  imageAlt?: string;
 
   // Step 2: Goals
   goalAmount: string;
@@ -78,9 +79,7 @@ export interface CampaignWizardData {
   startDate: string;
   endDate: string;
   milestones: MilestoneItem[];
-  stretchGoals: StretchGoalItem[];
-  scheduledPublishAt: string;
-  budgetBreakdown: Array<{ category: string; percentage: string; description: string }>;
+  stretchGoals?: StretchGoalItem[];
 
   // Step 4: Impact Statement
   impactStatement: string;
@@ -103,6 +102,7 @@ export const INITIAL_WIZARD_DATA: CampaignWizardData = {
   shortDescription: "",
   fullStory: "",
   imageUrl: "",
+  imageAlt: "",
 
   goalAmount: "",
   token: "XLM",
@@ -143,6 +143,7 @@ export const detailsSchema = z.object({
   shortDescription: z.string().min(10, "Short description must be at least 10 characters").max(300, "Short description cannot exceed 300 characters"),
   fullStory: z.string().min(20, "Full story must be at least 20 characters"),
   imageUrl: z.string().url("Must be a valid image URL").or(z.string().length(0)),
+  imageAlt: z.string().optional(),
   language: z.string().min(1, "Language is required"),
 });
 

@@ -132,6 +132,42 @@ if (body.fundsRaised !== undefined && (!Number.isFinite(body.fundsRaised) || bod
     let updated = campaign;
     if (body.status) {
       if (!body.changedBy) return noStore({ error: "changedBy is required when changing status" }, { status: 400 });
+
+      // Before campaigns go live (ACTIVE), run automated fraud check
+      if (body.status === "ACTIVE") {
+        const { fraudDetectionService } = await import("@/services/fraud-detection.service");
+        const review = await fraudDetectionService.reviewCampaignListing({
+          id: campaign.id,
+          title: campaign.name,
+          creatorAddress: campaign.creator,
+          description: campaign.description,
+          goalAmount: campaign.goalAmount,
+          treeCount: campaign.treeCount,
+          durationDays: campaign.durationMs ? Math.round(campaign.durationMs / 86_400_000) : undefined,
+          location: campaign.location,
+        });
+
+        if (review.action === "FLAGGED_FOR_MANUAL_REVIEW") {
+          return noStore(
+            {
+              error: "Campaign listing flagged for potential fraud and held in manual review queue before going live.",
+              code: "FLAGGED_FOR_MANUAL_REVIEW",
+              reviewItem: review.reviewItem,
+            },
+            { status: 422 }
+          );
+        } else if (review.action === "AUTO_SUSPENDED") {
+          return noStore(
+            {
+              error: "Campaign listing suspended due to critical fraud risk.",
+              code: "AUTO_SUSPENDED",
+              reviewItem: review.reviewItem,
+            },
+            { status: 403 }
+          );
+        }
+      }
+
       updated = await transitionCampaignStatus(campaign, body.status, body.changedBy, body.reason);
     }
 if (body.name !== undefined || body.description !== undefined || body.language !== undefined || body.translations !== undefined || body.localizedContent !== undefined || body.autoTranslate !== undefined || body.treeCount !== undefined || body.co2Sequestration !== undefined || body.speciesCount !== undefined || body.pledgeThankYouGreeting !== undefined || body.pledgeThankYouBody !== undefined) {

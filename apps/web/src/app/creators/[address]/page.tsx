@@ -56,6 +56,16 @@ async function CreatorProfileContent({ address }: { address: string }) {
             </span>
           </div>
 
+          {/* Link to Blog */}
+          <div className="mt-8">
+            <Link
+              href={`/creators/${address}/blog`}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 transition-colors"
+            >
+              View Creator Blog & Updates →
+            </Link>
+          </div>
+
           {/* All Campaigns List */}
           <div className="mt-12">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">
