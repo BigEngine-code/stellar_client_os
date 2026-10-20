@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, use } from "react";
+import React, { useState, use, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -418,6 +418,13 @@ export function MilestoneProgressBar({
 
 export default function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  useEffect(() => {
+    const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]') ?? document.createElement("link");
+    canonical.rel = "canonical";
+    canonical.href = `${window.location.origin}/campaigns/${encodeURIComponent(id)}`;
+    if (!canonical.parentNode) document.head.appendChild(canonical);
+    return () => canonical.remove();
+  }, [id]);
   const [activeTab, setActiveTab] = useState("overview");
   const [showInsuranceModal, setShowInsuranceModal] = useState(false);
   const [claimSubmitted, setClaimSubmitted] = useState(false);
