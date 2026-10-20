@@ -27,6 +27,7 @@ export interface CampaignDonationPanelProps {
 
 interface DonationResponse {
   receipt: DonationReceipt;
+  badges?: Array<{ key: string; name: string; description: string; icon: string }>;
 }
 
 /**
@@ -57,6 +58,7 @@ export function CampaignDonationPanel({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [receipt, setReceipt] = useState<DonationReceipt | null>(null);
+  const [earnedBadges, setEarnedBadges] = useState<DonationResponse["badges"]>([]);
 
   const reset = () => {
     setAmount("");
@@ -108,6 +110,7 @@ export function CampaignDonationPanel({
 
       const body = (await response.json()) as DonationResponse;
       setReceipt(body.receipt);
+      setEarnedBadges(body.badges ?? []);
       toast.success("Thank you for your donation!");
     } catch {
       setError("Network error — please check your connection and try again.");
@@ -130,6 +133,14 @@ export function CampaignDonationPanel({
         <p className="mt-2 text-sm text-zinc-300">
           Thank you — your contribution goes straight to the campaign creator.
         </p>
+        {earnedBadges.length > 0 && (
+          <div className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/5 p-4" aria-live="polite">
+            <h3 className="font-semibold text-amber-200">Badge progress unlocked</h3>
+            <ul className="mt-2 flex flex-wrap gap-2" aria-label="Newly earned backer badges">
+              {earnedBadges.map((badge) => <li key={badge.key} className="rounded-full border border-amber-400/30 px-3 py-1 text-sm text-amber-100">{badge.icon} {badge.name}</li>)}
+            </ul>
+          </div>
+        )}
 
         <dl className="mt-6 divide-y divide-white/10 rounded-xl border border-white/10">
           <div className="flex justify-between gap-4 p-3 text-sm">

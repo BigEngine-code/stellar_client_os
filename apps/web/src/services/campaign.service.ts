@@ -229,6 +229,8 @@ export interface CampaignRecord {
   /** Creator-defined funding milestones with automated notifications. */
   milestones?: CampaignMilestone[];
   durationMs?: number;
+  deadline?: number;
+  countdownEnabled?: boolean;
   status: CampaignStatus;
   goalAmount: string;
   raisedAmount: string;
@@ -907,6 +909,7 @@ export async function createCampaign(input: {
   co2SequestrationKg?: string;
   durationMs?: number;
   deadline?: number;
+  countdownEnabled?: boolean;
   goalAmount: string;
   raisedAmount?: string;
   sponsorCount?: number;
@@ -942,7 +945,9 @@ export async function createCampaign(input: {
     milestones: input.milestones ? input.milestones.map((milestone) => ({ ...milestone })) : [],
     region: input.region,
     treeSpecies: input.treeSpecies,
-gpsLocations: input.gpsLocations,
+    gpsLocations: input.gpsLocations,
+    deadline: input.deadline,
+    countdownEnabled: input.countdownEnabled,
     underrepresentedTags: input.underrepresentedTags,
     species: input.species,
     treeCount: input.treeCount ?? 0,
