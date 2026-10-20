@@ -283,6 +283,16 @@ export interface CampaignRecord {
   /** Timestamp when the campaign was designated as a Staff Pick. */
   staffPickedAt?: number;
   insuranceClaim?: CampaignInsuranceClaim;
+  /**
+   * Country-level access restrictions for this campaign.
+   *
+   * - When `mode` is `"allow"` only visitors whose country is in
+   *   `countryCodes` may back the campaign.
+   * - When `mode` is `"block"` visitors whose country is in
+   *   `countryCodes` are denied access.
+   * - `null` or absent means no restrictions.
+   */
+  geoRestriction?: import("./campaign-geo-restriction.service").GeoRestriction | null;
   /** Time-limited stretch goals that unlock special backer rewards. */
   stretchGoals?: import("./campaign-stretch-goals.service").StretchGoal[];
   /** Tiered funding goals with escalating deliverables (issue #1247). */
