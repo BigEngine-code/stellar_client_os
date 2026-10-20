@@ -19,6 +19,7 @@ import {
   TreePine,
   Download,
   Coins,
+  Bell,
   Camera,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,8 @@ import { SustainabilityScoreBadge } from "@/components/modules/campaign/sustaina
 import { OneTimeDonationButton } from "@/components/modules/campaign/donation/OneTimeDonationButton";
 import { CampaignCharityBadge } from "@/components/modules/campaign/CharityBadge";
 import { StaffPickBadge } from "@/components/modules/campaign/StaffPickBadge";
+import { CampaignWaitlist } from "@/components/modules/campaign/waitlist/CampaignWaitlist";
+import { calculateSustainabilityScore } from "@/lib/campaign/sustainability";
 
 const translations = {
   en: {
@@ -430,6 +433,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const [showInsuranceModal, setShowInsuranceModal] = useState(false);
   const [claimSubmitted, setClaimSubmitted] = useState(false);
   const [showARModal, setShowARModal] = useState(false);
+  const [waitlistCount, setWaitlistCount] = useState(0);
 
   // Mock campaign record data
   const campaign = {
@@ -471,6 +475,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
     location: "Amazon Basin, South America",
     isStaffPick: true,
     staffPickReason: "Outstanding community guardianship and verifiable canopy restoration.",
+    isComingSoon: true,
     milestones: DEFAULT_CAMPAIGN_MILESTONES,
   };
 
@@ -486,6 +491,10 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
     [campaign.treeType, campaign.location, campaign.treesPlanted, campaign.shortDescription, campaign.category]
   );
 
+  const raised = Number(campaign.raisedAmount.replace(/,/g, ""));
+  const goal = Number(campaign.goalAmount.replace(/,/g, ""));
+  const progressPct = goal > 0 ? Math.min(100, Math.round((raised / goal) * 100)) : 0;
+
   // The mock detail page renders as the campaign creator, so creator-only
   // controls (featuring backers, managing community spaces) are exercised.
   // Replace with the connected wallet address once wallet state is wired here.
@@ -496,6 +505,53 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const detectedLanguageName = languageNames[detectedLang] ?? detectedLang;
   const [translationLang, setTranslationLang] = useState<TranslationKey | "">("");
   const translation = translationLang ? translations[translationLang] : null;
+
+  // Pre-launch waitlist: when a campaign is marked "coming soon", the detail
+  // page renders a teaser + email capture instead of the pledge/funding UI.
+  if (campaign.isComingSoon) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-4xl space-y-8">
+        <Link
+          href="/campaigns"
+          aria-label="Back to Campaigns Directory"
+          className="inline-flex items-center text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
+        >
+          <ArrowLeft className="mr-1 h-3.5 w-3.5" /> Back to Campaigns Directory
+        </Link>
+
+        <div className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-gradient-to-r from-zinc-900 via-purple-950/20 to-zinc-900 p-6 md:p-10 shadow-2xl space-y-4">
+          <div className="flex items-center gap-2.5">
+            <Badge className="bg-purple-600 text-white font-semibold text-xs">{campaign.category}</Badge>
+            <Badge variant="outline" className="border-amber-500 text-amber-400 text-xs font-semibold">
+              <Bell className="mr-1 h-3 w-3" /> Coming Soon
+            </Badge>
+          </div>
+          <h1 className="text-3xl font-extrabold text-zinc-50 tracking-tight">{campaign.title}</h1>
+          <p className="text-sm text-zinc-300 leading-relaxed">{campaign.shortDescription}</p>
+          <p className="text-sm text-amber-200/90 italic bg-amber-950/20 p-4 rounded-lg border border-amber-900/30">
+            &ldquo;{campaign.impactStatement}&rdquo;
+          </p>
+          <div className="flex items-center gap-4 text-xs text-zinc-400 pt-2">
+            <span>Created by: <strong className="text-zinc-200 font-mono">{campaign.creator}</strong></span>
+            <span>Launching: <strong className="text-zinc-200">{campaign.startDate}</strong></span>
+          </div>
+        </div>
+
+        <CampaignWaitlist
+          campaignId={campaign.id}
+          campaignTitle={campaign.title}
+          launchDate={campaign.startDate}
+          onCountChange={setWaitlistCount}
+        />
+
+        {waitlistCount > 0 && (
+          <p role="status" aria-live="polite" className="text-center text-xs text-zinc-400">
+            {waitlistCount} {waitlistCount === 1 ? "person has" : "people have"} joined the waitlist. You&apos;ll be notified at launch.
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -879,7 +935,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
         </TabsContent>
 
         <TabsContent value="ar-view">
-          <CampaignARViewer
+          <CampaignARVisualizer
             treesPlanted={Number(campaign.treesPlanted.replace(/,/g, ""))}
             targetTrees={campaign.targetTrees}
             treeType={campaign.treeType}
