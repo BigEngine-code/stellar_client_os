@@ -19,15 +19,18 @@ import {
   TreePine,
   Download,
   Coins,
+  Camera,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { CampaignARVisualizer } from "@/components/modules/campaign/ar/CampaignARVisualizer";
+import CampaignARViewer from "@/components/modules/campaigns/CampaignARViewer";
 import { CampaignSponsorWall } from "@/components/modules/campaign/sponsor-wall/CampaignSponsorWall";
 import { CampaignCollaboration } from "@/components/modules/campaign/collaboration/CampaignCollaboration";
 import { CampaignMilestones } from "@/components/modules/campaign/CampaignMilestones";
 import { CampaignQAModeration } from "@/components/modules/campaign/qa/CampaignQAModeration";
+import { CampaignLiveQASession } from "@/components/modules/campaign/qa/CampaignLiveQASession";
 import { CampaignSeries } from "@/components/modules/campaign/series/CampaignSeries";
 import { CampaignAnalyticsDashboard } from "@/components/modules/campaign/analytics/CampaignAnalyticsDashboard";
 import { BackerCommunity } from "@/components/modules/campaign/community/BackerCommunity";
@@ -44,6 +47,7 @@ import { CampaignFollow } from "@/components/modules/campaign/CampaignFollow";
 import { VerificationMediaGallery, type VerificationMediaItem } from "@/components/modules/campaign/VerificationMediaGallery";
 import { CO2SequestrationProjection } from "@/components/modules/dashboard/CO2SequestrationProjection";
 import { CampaignSustainabilityScore } from "@/components/modules/campaign/sustainability/CampaignSustainabilityScore";
+import { SustainabilityScoreBadge } from "@/components/modules/campaign/sustainability/SustainabilityScoreBadge";
 import { OneTimeDonationButton } from "@/components/modules/campaign/donation/OneTimeDonationButton";
 import { CampaignCharityBadge } from "@/components/modules/campaign/CharityBadge";
 import { StaffPickBadge } from "@/components/modules/campaign/StaffPickBadge";
@@ -885,6 +889,12 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
 
         {/* Tab 5: Q&A Moderation (#791) */}
         <TabsContent value="qa">
+          <CampaignLiveQASession
+            campaignId={campaign.id}
+            creatorAddress={campaign.creator}
+            viewerAddress={viewerAddress}
+            isCreator={isCreatorView}
+          />
           <CampaignQAModeration campaignId={campaign.id} campaignTitle={campaign.title} />
         </TabsContent>
 
@@ -952,5 +962,6 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
         />
       )}
     </main>
+    </div>
   );
 }
