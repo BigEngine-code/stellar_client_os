@@ -203,6 +203,17 @@ export const typeDefs = /* GraphQL */`
     FAILED
   }
 
+  enum CampaignCategory {
+    TECH
+    ART
+    SOCIAL_IMPACT
+    CLIMATE
+    EDUCATION
+    HEALTH
+    COMMUNITY
+    OTHER
+  }
+
   enum CampaignSortField {
     createdAt
     updatedAt
@@ -227,6 +238,8 @@ export const typeDefs = /* GraphQL */`
     maxGoalAmount: String
     createdAfter: Int
     createdBefore: Int
+    categories: [CampaignCategory!]
+    tags: [String!]
   }
 
   input CampaignSort {
@@ -285,6 +298,16 @@ export const typeDefs = /* GraphQL */`
     breakdown: CampaignHealthBreakdown!
   }
 
+  type CampaignMilestone {
+    id: ID!
+    campaignId: ID!
+    label: String!
+    amount: String!
+    percent: Float!
+    reached: Boolean!
+    reachedAt: Int
+  }
+
   type Campaign {
     id: ID!
     creator: String!
@@ -309,6 +332,9 @@ export const typeDefs = /* GraphQL */`
     healthScore: Int!
     healthLevel: String!
     healthAssessment: CampaignHealthAssessment
+    category: CampaignCategory
+    tags: [String!]!
+    milestones: [CampaignMilestone!]!
     sponsors: [CampaignSponsor!]!
     statusHistory: [CampaignStatusHistory!]!
   }

@@ -24,6 +24,13 @@ import {
 import { EmailService } from "./email.service";
 import type { CampaignEmailer } from "./campaign.service";
 import { buildPledgeThankYouEmail } from "./pledge-thank-you-email.service";
+import {
+  DEFAULT_MILESTONES,
+  evaluateMilestones,
+  type CampaignMilestone,
+} from "./campaign-milestones";
+import { CampaignMilestoneEmailService } from "./campaign-milestone-email.service";
+import { buildCampaignNotificationDispatch } from "./campaign-notification.service";
 
 /**
  * One-time charitable campaign donations (issue #1001).
@@ -80,7 +87,11 @@ export class CampaignDonationService {
   private receipts = new Map<string, DonationReceipt>();
   private idempotency = new Map<string, string>();
 
-  constructor(private readonly emailService: CampaignEmailer = new EmailService()) {}
+  private readonly milestoneEmailService: CampaignMilestoneEmailService;
+
+  constructor(private readonly emailService: CampaignEmailer = new EmailService()) {
+    this.milestoneEmailService = new CampaignMilestoneEmailService(emailService);
+  }
 
   private idempotencyKey(campaignId: string, key: string): string {
     return `${campaignId.trim()}::${key.trim()}`;
@@ -164,9 +175,29 @@ export class CampaignDonationService {
     // Reuse the campaign contribution ledger so raised totals and the
     // creator's funding-milestone notifications behave exactly as for any
     // other contribution. Donations are whole tokens, matching the ledger.
+    const previousRaised = campaign.raised ?? 0;
     const recorded = await recordCampaignContribution(campaignId, amount, dataSource);
     if (!recorded) {
       return { ok: false, error: "Campaign not found.", code: "INVALID_CAMPAIGN" };
+    }
+
+    const newRaised = recorded.campaign.raised ?? previousRaised;
+    const goalAmount = recorded.campaign.goal ?? campaign.goal ?? 0;
+    const crossedMilestones = evaluateMilestones(
+      recorded.campaign.milestones ?? campaign.milestones ?? DEFAULT_MILESTONES,
+      previousRaised,
+      newRaised,
+      goalAmount,
+    );
+
+    if (crossedMilestones.length > 0) {
+      await this.dispatchMilestoneNotifications(
+        recorded.campaign,
+        crossedMilestones,
+        newRaised,
+        goalAmount,
+        dataSource,
+      );
     }
 
     const donation: CampaignDonation = {
@@ -229,8 +260,68 @@ export class CampaignDonationService {
       donation,
       receipt,
       campaign: recorded.campaign,
-      milestones: recorded.milestones,
+      milestones: crossedMilestones.map((milestone) => milestone.percentage),
     };
+  }
+
+  /**
+   * Fire backer emails and in-app notifications for each newly crossed
+   * milestone, then persist `notifiedAt` so a replay never re-notifies.
+   */
+  private async dispatchMilestoneNotifications(
+    campaign: CampaignRecord,
+    milestones: CampaignMilestone[],
+    raised: number,
+    goalAmount: number,
+    dataSource: CampaignDataSource,
+  ): Promise<void> {
+    for (const milestone of milestones) {
+      try {
+        await this.milestoneEmailService.notifySponsors(campaign, milestone, raised, goalAmount);
+      } catch {
+        // A mail provider outage must not undo a confirmed donation.
+      }
+
+      try {
+        buildCampaignNotificationDispatch(campaign, {
+          type: "MILESTONE_REACHED",
+          milestonePercentage: milestone.percentage,
+          milestoneLabel: milestone.label,
+          raised,
+          goalAmount,
+        });
+      } catch {
+        // In-app notification failures are non-fatal for the donation.
+      }
+
+      try {
+        await this.persistMilestoneNotified(campaign.id, milestone, dataSource);
+      } catch {
+        // Persistence failures are non-fatal; the donation is already recorded.
+      }
+    }
+  }
+
+  /** Mark a milestone as notified on the campaign record. */
+  private async persistMilestoneNotified(
+    campaignId: string,
+    milestone: CampaignMilestone,
+    dataSource: CampaignDataSource,
+  ): Promise<void> {
+    const update = (dataSource as { updateCampaign?: CampaignDataSource["updateCampaign"] }).updateCampaign;
+    if (typeof update !== "function") {
+      return;
+    }
+    const current = await getCampaign(campaignId, dataSource);
+    if (!current) {
+      return;
+    }
+    const milestones = (current.milestones ?? DEFAULT_MILESTONES).map((entry) =>
+      entry.percentage === milestone.percentage
+        ? { ...entry, notifiedAt: entry.notifiedAt ?? Date.now() }
+        : entry,
+    );
+    await update.call(dataSource, campaignId, { milestones });
   }
 
   /** Every donation recorded for a campaign, oldest first. */

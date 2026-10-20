@@ -83,7 +83,9 @@ export function useCampaigns() {
           const formatted = (data as any[]).map((c) => ({
             id: c.id,
             title: c.name,
-            category: "General", // Placeholder if not in API
+            category: c.category ?? "General",
+            tags: c.tags ?? [],
+            milestones: c.milestones ?? [],
             raisedAmount: c.raisedAmount || "0",
             goalAmount: c.goalAmount,
             token: "XLM",
