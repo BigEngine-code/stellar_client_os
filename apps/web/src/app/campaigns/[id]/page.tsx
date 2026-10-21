@@ -20,6 +20,7 @@ import { NFTRewardTiersSection } from "@/components/modules/campaign/reward-nft/
 import { RelatedCampaignsShelf } from "@/components/campaign/RelatedCampaignsShelf";
 import { CampaignReviews } from "@/components/modules/campaign/reviews/CampaignReviews";
 import { CampaignCreatorReviewSettings } from "@/components/modules/campaign/reviews/CampaignCreatorReviewSettings";
+import { CampaignDiscussion } from "@/components/campaign/CampaignDiscussion";
 // #1196 — Campaign FAQ section
 import { CampaignFaqSection } from "@/components/modules/campaign/CampaignFaqSection";
 // #1206 — Backer messaging (creator only, shown when canManage=true)
@@ -165,6 +166,8 @@ export default async function CampaignPage({
         <CampaignReviews campaignId={campaign.id} />
         <CampaignCreatorReviewSettings campaignId={campaign.id} creatorAddress={campaign.creator} />
       </section>
+
+      <CampaignDiscussion campaignId={campaign.id} creatorAddress={campaign.creator} />
 
       {/* #1196 — Campaign FAQ section editable by creator */}
       <CampaignFaqSection
