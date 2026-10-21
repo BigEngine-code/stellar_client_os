@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useWallet } from "@/providers/StellarWalletProvider";
 import { PledgeThankYouContent, type PledgeThankYouDetails } from "@/components/modules/campaign/thank-you/PledgeThankYouContent";
+import { PersonalizedCampaignRecommendations } from "@/components/campaign/PersonalizedCampaignRecommendations";
 import {
   DONATION_ALLOCATION_DESCRIPTION,
   DONATION_PRESET_AMOUNTS,
@@ -27,6 +28,7 @@ export interface CampaignDonationPanelProps {
 
 interface DonationResponse {
   receipt: DonationReceipt;
+  badges?: Array<{ key: string; name: string; description: string; icon: string }>;
 }
 
 /**
@@ -82,6 +84,7 @@ export function CampaignDonationPanel({
       active = false;
     };
   }, [campaignId, receipt]);
+  const [earnedBadges, setEarnedBadges] = useState<DonationResponse["badges"]>([]);
 
   const reset = () => {
     setAmount("");
@@ -91,6 +94,7 @@ export function CampaignDonationPanel({
     setAnonymous(false);
     setError("");
     setReceipt(null);
+    setEarnedBadges([]);
     setThankYouDetails(null);
     setThankYouError(null);
   };
@@ -135,6 +139,7 @@ export function CampaignDonationPanel({
 
       const body = (await response.json()) as DonationResponse;
       setReceipt(body.receipt);
+      setEarnedBadges(body.badges ?? []);
       toast.success("Thank you for your donation!");
     } catch {
       setError("Network error — please check your connection and try again.");
@@ -161,6 +166,14 @@ export function CampaignDonationPanel({
         {thankYouError && <p role="alert" className="mt-4 text-sm text-rose-400">{thankYouError}</p>}
         {!loadingThankYou && !thankYouError && (
           <PledgeThankYouContent details={thankYouDetails ?? { greeting: "Thank you for backing this campaign." }} />
+        )}
+        {earnedBadges.length > 0 && (
+          <div className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/5 p-4" aria-live="polite">
+            <h3 className="font-semibold text-amber-200">Badge progress unlocked</h3>
+            <ul className="mt-2 flex flex-wrap gap-2" aria-label="Newly earned backer badges">
+              {earnedBadges.map((badge) => <li key={badge.key} className="rounded-full border border-amber-400/30 px-3 py-1 text-sm text-amber-100">{badge.icon} {badge.name}</li>)}
+            </ul>
+          </div>
         )}
 
         <dl className="mt-6 divide-y divide-white/10 rounded-xl border border-white/10">
@@ -196,6 +209,10 @@ export function CampaignDonationPanel({
             1% of your donation funds the campaign insurance pool. If trees die within
             two years of planting, sponsors receive an automatic refund from the pool.
           </span>
+        </div>
+
+        <div className="mt-6">
+          <PersonalizedCampaignRecommendations />
         </div>
 
         <Button type="button" variant="outline" className="mt-6" onClick={reset}>
