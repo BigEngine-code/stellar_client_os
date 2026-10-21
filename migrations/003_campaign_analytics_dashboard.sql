@@ -45,3 +45,38 @@ CREATE TABLE IF NOT EXISTS campaign_daily_analytics (
   unique_viewers int NOT NULL DEFAULT 0,
   PRIMARY KEY (campaign_id, day)
 );
+
+-- Supports daily funding-velocity queries (pledges per day, rolling totals).
+CREATE INDEX IF NOT EXISTS campaign_daily_analytics_campaign_day_idx
+  ON campaign_daily_analytics (campaign_id, day DESC);
+CREATE INDEX IF NOT EXISTS campaign_daily_analytics_day_idx
+  ON campaign_daily_analytics (day DESC);
+
+-- Raw page-view events powering the views and conversion charts.
+CREATE TABLE IF NOT EXISTS campaign_page_views (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_id uuid NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  viewer_id text NOT NULL,
+  source text NOT NULL DEFAULT 'direct'
+    CONSTRAINT campaign_page_views_source_check CHECK (
+      source IN ('direct', 'search', 'social', 'referral', 'newsletter')
+    ),
+  viewed_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS campaign_page_views_campaign_idx
+  ON campaign_page_views (campaign_id, viewed_at DESC);
+CREATE INDEX IF NOT EXISTS campaign_page_views_source_idx
+  ON campaign_page_views (campaign_id, source, viewed_at DESC);
+
+-- Geographic breakdown of backers for the dashboard map/table.
+CREATE TABLE IF NOT EXISTS campaign_backer_demographics (
+  campaign_id uuid NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  region text NOT NULL,
+  backers int NOT NULL DEFAULT 0,
+  total_amount numeric(78, 0) NOT NULL DEFAULT 0,
+  PRIMARY KEY (campaign_id, region)
+);
+
+CREATE INDEX IF NOT EXISTS campaign_backer_demographics_campaign_idx
+  ON campaign_backer_demographics (campaign_id, backers DESC);

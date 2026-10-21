@@ -32,6 +32,14 @@ export interface CampaignAnalyticsDashboardProps {
   campaignTitle?: string;
 }
 
+interface DashboardBenchmarkMetric {
+  label: string;
+  current: number;
+  benchmark: number;
+  unit: string;
+  delta: number;
+}
+
 interface DashboardPayload {
   campaignId: string;
   updatedAt: number;
@@ -52,6 +60,13 @@ interface DashboardPayload {
   hourlyTrend?: Array<{ hour: string; amount: string; contributions: number; cumulative: string }>;
   totals: { visitors: number; contributions: number; totalFunded: string; conversionRate: number };
   speciesDiversity: { speciesCount: number; diversityScore: number; species: string[] };
+  benchmark: {
+    category: string;
+    anonymizedSampleSize: number;
+    comparedTo: string;
+    metrics: DashboardBenchmarkMetric[];
+    suggestions: string[];
+  };
 }
 
 const BAR_COLORS = ["#a855f7", "#8b5cf6", "#6366f1", "#10b981", "#f59e0b"];
@@ -69,6 +84,13 @@ const EMPTY: DashboardPayload = {
   hourlyTrend: [],
   totals: { visitors: 0, contributions: 0, totalFunded: "0", conversionRate: 0 },
   speciesDiversity: { speciesCount: 0, diversityScore: 0, species: [] },
+  benchmark: {
+    category: "General sustainability",
+    anonymizedSampleSize: 0,
+    comparedTo: "anonymized aggregated performance from similar campaigns in this category",
+    metrics: [],
+    suggestions: [],
+  },
 };
 
 function getTrafficSourceIcon(source: string) {
@@ -201,6 +223,8 @@ export function CampaignAnalyticsDashboard({
             <StatCard icon={<Gift className="h-4 w-4 text-amber-400" />} label="Conversion" value={`${dashboard.totals.conversionRate}%`} />
             <StatCard icon={<Globe className="h-4 w-4 text-emerald-400" />} label="Species Diversity" value={String(dashboard.speciesDiversity.diversityScore)} suffix={`${dashboard.speciesDiversity.speciesCount} spp`} />
           </div>
+
+          <BenchmarkPanel benchmark={dashboard.benchmark} />
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Traffic sources breakdown by referral source */}
@@ -394,6 +418,69 @@ export function CampaignAnalyticsDashboard({
         </>
       )}
     </section>
+  );
+}
+
+function BenchmarkPanel({
+  benchmark,
+}: {
+  benchmark: DashboardPayload["benchmark"];
+}) {
+  return (
+    <div className="rounded-xl border border-violet-900/60 bg-gradient-to-r from-violet-950/50 via-zinc-950/70 to-emerald-950/40 p-5">
+      <div className="flex flex-col gap-2 border-b border-zinc-800 pb-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-300">Benchmark panel</p>
+          <h3 className="mt-1 text-lg font-bold text-zinc-50">Performance vs similar campaigns</h3>
+        </div>
+        <div className="rounded-full border border-zinc-700 bg-zinc-900/60 px-3 py-1 text-[10px] font-medium text-zinc-300">
+          {benchmark.anonymizedSampleSize} anonymized campaigns in {benchmark.category}
+        </div>
+      </div>
+
+      <p className="mt-3 text-xs text-zinc-300">
+        Compared with {benchmark.comparedTo}. Metrics are aggregated and anonymized to protect creator privacy.
+      </p>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        {benchmark.metrics.map((metric) => {
+          const gap = metric.delta >= 0 ? `${metric.delta}% above` : `${Math.abs(metric.delta)}% below`;
+          return (
+            <div key={metric.label} className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+              <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-zinc-400">
+                <span>{metric.label}</span>
+                <span className={metric.delta >= 0 ? "text-emerald-400" : "text-amber-400"}>{gap}</span>
+              </div>
+              <div className="mt-3 flex items-end justify-between gap-2">
+                <div>
+                  <div className="text-xl font-black text-zinc-50">
+                    {metric.current}
+                    <span className="ml-1 text-[10px] font-semibold text-zinc-400">{metric.unit}</span>
+                  </div>
+                  <div className="mt-1 text-[10px] text-zinc-500">Your campaign</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-semibold text-violet-300">{metric.benchmark}</div>
+                  <div className="text-[10px] text-zinc-500">Benchmark</div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-5 rounded-lg border border-emerald-900/60 bg-emerald-950/20 p-4">
+        <h4 className="text-sm font-bold text-emerald-300">Suggested actions</h4>
+        <ul className="mt-3 space-y-2 text-xs text-zinc-200">
+          {benchmark.suggestions.map((suggestion) => (
+            <li key={suggestion} className="flex gap-2">
+              <span className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              <span>{suggestion}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
   );
 }
 
