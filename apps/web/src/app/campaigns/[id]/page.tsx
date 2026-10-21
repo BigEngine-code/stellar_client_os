@@ -1,10 +1,15 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Heart, Leaf } from "lucide-react";
+import { CampaignCountdown } from "@/components/CampaignCountdown";
+import { CampaignViewTracker } from "@/components/campaign/CampaignViewTracker";
 import CampaignShareButtons from "@/components/campaign/CampaignShareButtons";
 import { getCampaign } from "@/services/campaign.service";
 import { VerificationEvidenceGallery } from "@/components/campaign/VerificationEvidenceGallery";
 import { CampaignImpactCalculator } from "@/components/modules/impact/CampaignImpactCalculator";
+import { CampaignBudgetBreakdown } from "@/components/modules/campaign/CampaignBudgetBreakdown";
+import { StretchGoals } from "@/components/modules/campaign/StretchGoals";
+import { CampaignRoadmapTimeline } from "@/components/modules/campaign/CampaignRoadmapTimeline";
 import { CampaignDonationPanel } from "@/components/modules/campaign/donation/CampaignDonationPanel";
 import { RewardTiersInstalmentCheckout } from "@/components/modules/campaign/instalments/RewardTiersInstalmentCheckout";
 import { InAppSurveyNotificationBanner } from "@/components/modules/campaign/survey/InAppSurveyNotificationBanner";
@@ -13,6 +18,8 @@ import { StaffPickBadge } from "@/components/modules/campaign/StaffPickBadge";
 import { CampaignComplianceDocumentsList } from "@/components/modules/campaign/compliance/CampaignComplianceDocumentsList";
 import { NFTRewardTiersSection } from "@/components/modules/campaign/reward-nft/NFTRewardTiersSection";
 import { RelatedCampaignsShelf } from "@/components/campaign/RelatedCampaignsShelf";
+import { CampaignReviews } from "@/components/modules/campaign/reviews/CampaignReviews";
+import { CampaignCreatorReviewSettings } from "@/components/modules/campaign/reviews/CampaignCreatorReviewSettings";
 // #1196 — Campaign FAQ section
 import { CampaignFaqSection } from "@/components/modules/campaign/CampaignFaqSection";
 // #1206 — Backer messaging (creator only, shown when canManage=true)
@@ -153,6 +160,11 @@ export default async function CampaignPage({
         creatorAddress={campaign.creatorAddress}
         campaignStatus={campaign.status}
       />
+
+      <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <CampaignReviews campaignId={campaign.id} />
+        <CampaignCreatorReviewSettings campaignId={campaign.id} creatorAddress={campaign.creator} />
+      </section>
 
       {/* #1196 — Campaign FAQ section editable by creator */}
       <CampaignFaqSection

@@ -13,6 +13,7 @@ import { CO2SequestrationProjection } from "@/components/modules/dashboard/CO2Se
 import { StaffPicksSection } from "@/components/modules/campaign/StaffPicksSection";
 import { SpotlightSection } from "@/components/modules/campaign/SpotlightSection";
 import { BackerNotificationPreferencePanel } from "@/components/modules/dashboard/BackerNotificationPreferencePanel";
+import { BackerTestimonialsDashboard } from "@/components/modules/dashboard/BackerTestimonialsDashboard";
 import { WebhookEventLog } from "@/components/modules/dashboard/WebhookEventLog";
 import CreatorAnalyticsEntryCard from "@/components/modules/dashboard/CreatorAnalyticsEntryCard";
 
@@ -21,6 +22,7 @@ const DashboardPage = async () => {
         <main className="h-full overflow-y-auto space-y-4 md:space-y-12 py-10">
             <StatsOverview />
             <BackerNotificationPreferencePanel />
+            <BackerTestimonialsDashboard />
             <SpotlightSection />
             <StaffPicksSection />
             <CreatorStatsDashboard />
