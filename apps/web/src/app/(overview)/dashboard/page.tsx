@@ -14,6 +14,7 @@ import { StaffPicksSection } from "@/components/modules/campaign/StaffPicksSecti
 import { SpotlightSection } from "@/components/modules/campaign/SpotlightSection";
 import { BackerNotificationPreferencePanel } from "@/components/modules/dashboard/BackerNotificationPreferencePanel";
 import { WebhookEventLog } from "@/components/modules/dashboard/WebhookEventLog";
+import CreatorAnalyticsEntryCard from "@/components/modules/dashboard/CreatorAnalyticsEntryCard";
 
 const DashboardPage = async () => {
     return (
@@ -23,6 +24,7 @@ const DashboardPage = async () => {
             <SpotlightSection />
             <StaffPicksSection />
             <CreatorStatsDashboard />
+            <CreatorAnalyticsEntryCard />
             <WebhookEventLog />
             <CampaignCreatorBadge />
             <MentorshipPanel />

@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { ArrowLeft, Recycle } from "lucide-react";
 
 import { CarbonTradingPanel } from "@/components/modules/campaign/carbon/CarbonTradingPanel";
+import { CampaignDonationPanel } from "@/components/modules/campaign/donation/CampaignDonationPanel";
 import { CampaignWaitlistPanel } from "@/components/modules/campaign/waitlist/CampaignWaitlistPanel";
 
 /**
@@ -42,10 +43,7 @@ export default function CampaignDonatePage() {
       </header>
 
       <div className="mt-8">
-        <CategoryNote
-          title="Coming soon"
-          body="Join the waitlist to get an email the moment this campaign launches. No pledge is required to join."
-        />
+        <CampaignDonationPanel campaignId={campaignId} />
       </div>
 
       <section className="mt-12 border-t border-zinc-800 pt-10">
@@ -68,15 +66,6 @@ export default function CampaignDonatePage() {
         <CampaignWaitlistPanel campaignId={campaignId} />
       </div>
     </main>
-  );
-}
-
-function CategoryNote({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="rounded-border border border-zinc-800 bg-zinc-900/40 p-5">
-      <p className="text-sm font-medium text-zinc-200">{title}</p>
-      <p className="mt-1 text-xs text-zinc-400">{body}</p>
-    </div>
   );
 }
 

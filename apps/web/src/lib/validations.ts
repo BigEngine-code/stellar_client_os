@@ -296,3 +296,78 @@ export const campaignMetadataSchema = z.object({
 
 export type CampaignMetadataFormData = z.infer<typeof campaignMetadataSchema>
 
+/**
+ * Currencies a backer may pledge in (issue #1170).
+ * USD and EUR are fiat display currencies; XLM and USDC settle on Stellar.
+ */
+export const DONATION_CURRENCIES = ["USD", "EUR", "XLM", "USDC"] as const
+
+export type DonationCurrency = (typeof DONATION_CURRENCIES)[number]
+
+/** Number of decimal places each donation currency supports. */
+export const DONATION_CURRENCY_PRECISION: Record<DonationCurrency, number> = {
+  USD: 2,
+  EUR: 2,
+  XLM: 7,
+  USDC: 7,
+}
+
+/** Schema for the backer's preferred donation currency. */
+export const donationCurrencySchema = z.enum(DONATION_CURRENCIES, {
+  errorMap: () => ({ message: "Please select a supported currency" }),
+})
+
+export type DonationCurrencyFormData = z.infer<typeof donationCurrencySchema>
+
+/**
+ * Build a regex that accepts a positive decimal with at most `decimals`
+ * fractional digits.
+ */
+function amountRegexFor(decimals: number): RegExp {
+  return new RegExp(`^\\d+(\\.\\d{1,${decimals}})?$`)
+}
+
+/**
+ * Validate a donation amount string against the precision of the given
+ * currency. Returns true when the amount is a positive number with no more
+ * fractional digits than the currency supports.
+ */
+export function isValidDonationAmount(amount: string, currency: DonationCurrency): boolean {
+  if (!amountRegexFor(DONATION_CURRENCY_PRECISION[currency]).test(amount)) return false
+  return parseFloat(amount) > 0
+}
+
+/**
+ * Schema for a single donation amount (issue #1170).
+ * Precision is validated against the selected currency.
+ */
+export const donationAmountSchema = z
+  .object({
+    amount: z.string().min(1, "Amount is required"),
+    currency: donationCurrencySchema,
+  })
+  .refine((data) => isValidDonationAmount(data.amount, data.currency), {
+    message: "Amount must be a positive number with valid precision for the selected currency",
+    path: ["amount"],
+  })
+
+export type DonationAmountFormData = z.infer<typeof donationAmountSchema>
+
+/**
+ * Schema for the multi-currency donation form (issue #1170).
+ * Carries the backer's original currency, the currency the pledge is
+ * converted into, and the amount entered in the original currency.
+ */
+export const donationFormSchema = z
+  .object({
+    originalCurrency: donationCurrencySchema,
+    convertedCurrency: donationCurrencySchema,
+    amount: z.string().min(1, "Amount is required"),
+  })
+  .refine((data) => isValidDonationAmount(data.amount, data.originalCurrency), {
+    message: "Amount must be a positive number with valid precision for the selected currency",
+    path: ["amount"],
+  })
+
+export type DonationFormData = z.infer<typeof donationFormSchema>
+

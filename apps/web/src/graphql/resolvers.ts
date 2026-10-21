@@ -9,7 +9,10 @@ import { DefaultStreamDataSource, getAnalyticsService } from "./analytics.servic
 import { getCampaignHealthAssessment, getCampaignRiskAssessment, getCampaignVerificationSummary, queryCampaigns } from "@/services/campaign.service";
 import type { CampaignDataSource, CampaignQueryInput } from "@/services/campaign.service";
 import { getCampaignSequelService } from "@/services/campaign-sequel.service";
-import { getCampaignAnalyticsDashboard } from "@/services/campaign-analytics-dashboard.service";
+import {
+  getCampaignAnalyticsDashboard,
+  getCampaignAnalyticsDashboardExport,
+} from "@/services/campaign-analytics-dashboard.service";
 import { getGrantProgramService } from "@/services/grant-program.service";
 import type {
   RegionFilter,
@@ -342,11 +345,33 @@ export function createResolvers(defaultDataSource?: StreamDataSource) {
         };
       },
 
+      /**
+       * Creator-facing campaign analytics dashboard (issue #1173).
+       * Returns daily pledges, page views, conversion rate, funding velocity,
+       * traffic sources and geographic backer breakdown.
+       */
       campaignAnalytics: async (
         _: unknown,
         args: { campaignId: string; network?: Network },
       ) => {
         return getCampaignAnalyticsDashboard(args.campaignId);
+      },
+
+      /**
+       * Export the campaign analytics dashboard as CSV or PDF (issue #1173).
+       *
+       * @example
+       * query {
+       *   campaignAnalyticsExport(campaignId: "c-1", format: CSV) {
+       *     format filename contentType content
+       *   }
+       * }
+       */
+      campaignAnalyticsExport: async (
+        _: unknown,
+        args: { campaignId: string; format: "CSV" | "PDF"; network?: Network },
+      ) => {
+        return getCampaignAnalyticsDashboardExport(args.campaignId, args.format);
       },
 
       grantPrograms: async () => {

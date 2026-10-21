@@ -118,6 +118,16 @@ export interface CampaignAnalyticsBenchmark {
   suggestions: string[];
 }
 
+export interface DailyVelocityPoint {
+  /** ISO date (YYYY-MM-DD) in UTC. */
+  date: string;
+  amount: string;
+  contributions: number;
+  cumulative: string;
+  /** Average amount per contribution for the day, as a decimal string. */
+  averageAmount: string;
+}
+
 export interface CampaignAnalyticsDashboard {
   campaignId: string;
   updatedAt: number;
@@ -126,6 +136,7 @@ export interface CampaignAnalyticsDashboard {
   demographics: BackerDemographic[];
   rewardTiers: RewardTierStat[];
   dailyTrend: DailyFundingPoint[];
+  dailyVelocity: DailyVelocityPoint[];
   hourlyTrend: HourlyFundingPoint[];
   totals: {
     visitors: number;
@@ -139,6 +150,18 @@ export interface CampaignAnalyticsDashboard {
     species: string[];
   };
   benchmark: CampaignAnalyticsBenchmark;
+}
+
+export type CampaignAnalyticsExportFormat = "csv" | "pdf";
+
+export interface CampaignAnalyticsExport {
+  campaignId: string;
+  format: CampaignAnalyticsExportFormat;
+  filename: string;
+  mimeType: string;
+  /** Serialized export payload (CSV text or PDF document bytes as a string). */
+  content: string;
+  generatedAt: number;
 }
 
 interface DashboardState {
@@ -450,6 +473,21 @@ export async function getCampaignAnalyticsDashboard(
     };
   });
 
+  let velocityCumulative = 0n;
+  const dailyVelocity: DailyVelocityPoint[] = days.map(([date, bucket]) => {
+    velocityCumulative += bucket.amount;
+    return {
+      date,
+      amount: bucket.amount.toString(),
+      contributions: bucket.contributions,
+      cumulative: velocityCumulative.toString(),
+      averageAmount:
+        bucket.contributions === 0
+          ? "0"
+          : (Number(bucket.amount) / bucket.contributions).toFixed(2),
+    };
+  });
+
   const hourlyMap = new Map<string, { contributions: number; amount: bigint }>();
   for (const contribution of state.contributions) {
     const hourKey = new Date(contribution.at).toISOString().slice(0, 13) + ":00";
@@ -496,6 +534,7 @@ export async function getCampaignAnalyticsDashboard(
     demographics,
     rewardTiers,
     dailyTrend,
+    dailyVelocity,
     hourlyTrend,
     totals,
     speciesDiversity: {
@@ -504,6 +543,175 @@ export async function getCampaignAnalyticsDashboard(
       species,
     },
     benchmark: buildBenchmark(campaign, { totals }),
+  };
+}
+
+function csvEscape(value: string | number): string {
+  const text = String(value);
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function csvRow(values: Array<string | number>): string {
+  return values.map(csvEscape).join(",");
+}
+
+export function buildCampaignAnalyticsCsv(dashboard: CampaignAnalyticsDashboard): string {
+  const lines: string[] = [];
+  lines.push(csvRow(["Campaign Analytics Dashboard"]));
+  lines.push(csvRow(["Campaign ID", dashboard.campaignId]));
+  lines.push(csvRow(["Generated At", new Date(dashboard.updatedAt).toISOString()]));
+  lines.push("");
+
+  lines.push(csvRow(["Totals"]));
+  lines.push(csvRow(["Visitors", "Contributions", "Total Funded", "Conversion Rate (%)"]));
+  lines.push(
+    csvRow([
+      dashboard.totals.visitors,
+      dashboard.totals.contributions,
+      dashboard.totals.totalFunded,
+      dashboard.totals.conversionRate,
+    ]),
+  );
+  lines.push("");
+
+  lines.push(csvRow(["Traffic Sources"]));
+  lines.push(csvRow(["Source", "Visitors", "Views", "Share (%)"]));
+  for (const source of dashboard.trafficSources) {
+    lines.push(csvRow([source.label, source.visitors, source.views, source.share]));
+  }
+  lines.push("");
+
+  lines.push(csvRow(["Conversion Funnel"]));
+  lines.push(csvRow(["Stage", "Count", "Conversion Rate (%)", "Drop-off Rate (%)"]));
+  for (const stage of dashboard.funnel) {
+    lines.push(csvRow([stage.label, stage.count, stage.conversionRate, stage.dropoffRate]));
+  }
+  lines.push("");
+
+  lines.push(csvRow(["Daily Funding Velocity"]));
+  lines.push(csvRow(["Date", "Amount", "Contributions", "Cumulative", "Average Amount"]));
+  for (const point of dashboard.dailyVelocity) {
+    lines.push(
+      csvRow([point.date, point.amount, point.contributions, point.cumulative, point.averageAmount]),
+    );
+  }
+  lines.push("");
+
+  lines.push(csvRow(["Backer Geography"]));
+  lines.push(csvRow(["Region", "Backers", "Total Amount", "Share (%)"]));
+  for (const region of dashboard.demographics) {
+    lines.push(csvRow([region.region, region.backers, region.totalAmount, region.share]));
+  }
+  lines.push("");
+
+  lines.push(csvRow(["Reward Tiers"]));
+  lines.push(csvRow(["Tier", "Price", "Backers", "Revenue", "Share (%)"]));
+  for (const tier of dashboard.rewardTiers) {
+    lines.push(csvRow([tier.name, tier.price, tier.backers, tier.revenue, tier.share]));
+  }
+
+  return lines.join("\n");
+}
+
+function pdfEscape(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+
+/**
+ * Builds a minimal, dependency-free single-page PDF document that renders the
+ * dashboard as plain text lines. Suitable for download/print by creators.
+ */
+export function buildCampaignAnalyticsPdf(dashboard: CampaignAnalyticsDashboard): string {
+  const lines: string[] = [];
+  lines.push(`Campaign Analytics Dashboard`);
+  lines.push(`Campaign: ${dashboard.campaignId}`);
+  lines.push(`Generated: ${new Date(dashboard.updatedAt).toISOString()}`);
+  lines.push("");
+  lines.push(
+    `Totals: visitors=${dashboard.totals.visitors} contributions=${dashboard.totals.contributions} funded=${dashboard.totals.totalFunded} conversion=${dashboard.totals.conversionRate}%`,
+  );
+  lines.push("");
+  lines.push("Traffic Sources");
+  for (const source of dashboard.trafficSources) {
+    lines.push(`  ${source.label}: visitors=${source.visitors} views=${source.views} share=${source.share}%`);
+  }
+  lines.push("");
+  lines.push("Conversion Funnel");
+  for (const stage of dashboard.funnel) {
+    lines.push(`  ${stage.label}: count=${stage.count} conversion=${stage.conversionRate}% dropoff=${stage.dropoffRate}%`);
+  }
+  lines.push("");
+  lines.push("Daily Funding Velocity");
+  for (const point of dashboard.dailyVelocity) {
+    lines.push(
+      `  ${point.date}: amount=${point.amount} contributions=${point.contributions} cumulative=${point.cumulative} avg=${point.averageAmount}`,
+    );
+  }
+  lines.push("");
+  lines.push("Backer Geography");
+  for (const region of dashboard.demographics) {
+    lines.push(`  ${region.region}: backers=${region.backers} amount=${region.totalAmount} share=${region.share}%`);
+  }
+
+  const pageLines = lines.slice(0, 60);
+  const textOps = pageLines
+    .map((line, index) => `BT /F1 10 Tf 40 ${780 - index * 12} Td (${pdfEscape(line)}) Tj ET`)
+    .join("\n");
+
+  const objects: string[] = [];
+  objects.push("<< /Type /Catalog /Pages 2 0 R >>");
+  objects.push("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  objects.push(
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+  );
+  const stream = textOps;
+  objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+
+  let pdf = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  objects.forEach((body, index) => {
+    offsets.push(pdf.length);
+    pdf += `${index + 1} 0 obj\n${body}\nendobj\n`;
+  });
+  const xrefStart = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets) {
+    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+  return pdf;
+}
+
+export async function getCampaignAnalyticsDashboardExport(
+  campaignId: string,
+  format: CampaignAnalyticsExportFormat,
+  dataSource = getCampaignDataSource(),
+  now = Date.now(),
+): Promise<CampaignAnalyticsExport | null> {
+  if (format !== "csv" && format !== "pdf") {
+    throw new Error(`format must be one of csv, pdf`);
+  }
+  const dashboard = await getCampaignAnalyticsDashboard(campaignId, dataSource, now);
+  if (!dashboard) return null;
+  const safeId = campaignId.replace(/[^a-zA-Z0-9_-]/g, "_");
+  if (format === "csv") {
+    return {
+      campaignId,
+      format,
+      filename: `campaign-${safeId}-analytics.csv`,
+      mimeType: "text/csv;charset=utf-8",
+      content: buildCampaignAnalyticsCsv(dashboard),
+      generatedAt: now,
+    };
+  }
+  return {
+    campaignId,
+    format,
+    filename: `campaign-${safeId}-analytics.pdf`,
+    mimeType: "application/pdf",
+    content: buildCampaignAnalyticsPdf(dashboard),
+    generatedAt: now,
   };
 }
 
