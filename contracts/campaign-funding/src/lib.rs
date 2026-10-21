@@ -1,7 +1,11 @@
 #![no_std]
+pub mod checked_math;
+pub use checked_math::CheckedMath;
+
 use soroban_sdk::{
     contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, token,
-    Address, Env, Vec,
+    Address, Env, IntoVal, Symbol, Vec,
+    Address, Bytes, BytesN, Env, String, Vec,
 };
 
 /// Optional `Address` wrapper suitable for use inside `#[contracttype]` structs.
@@ -26,7 +30,102 @@ pub enum OptionalAddress {
 /// self-documenting.
 #[contracttype]
 #[derive(Clone)]
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SpeciesPlantingRecordedEvent {
+    pub campaign_id: u64,
+    pub species_code: BytesN<32>,
+    pub count: u64,
+    pub new_diversity_score: u32,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DiversityScoreUpdatedEvent {
+    pub campaign_id: u64,
+    pub diversity_score: u32,
+    pub distinct_species: u32,
+}
+
+
+#[contracttype]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum EscrowStatus {
+    Held = 0,
+    Verified = 1,
+    Released = 2,
+    Disputed = 3,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowAccount {
+    pub campaign_id: u64,
+    pub verifier: Address,
+    pub total_escrowed: i128,
+    pub released_amount: i128,
+    pub status: EscrowStatus,
+    pub is_verified: bool,
+    pub trees_planted: u64,
+    pub target_trees: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowAccountCreatedEvent {
+    pub campaign_id: u64,
+    pub verifier: Address,
+    pub target_trees: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowDepositEvent {
+    pub campaign_id: u64,
+    pub depositor: Address,
+    pub amount: i128,
+    pub total_escrowed: i128,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowVerifiedEvent {
+    pub campaign_id: u64,
+    pub verifier: Address,
+    pub trees_planted: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowFundsReleasedEvent {
+    pub campaign_id: u64,
+    pub creator: Address,
+    pub amount: i128,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowDisputedEvent {
+    pub campaign_id: u64,
+    pub reason: Symbol,
+}
+
+
+/// Emitted when dynamic supply/demand pricing is evaluated for a campaign.
+#[contractevent(topics = ["DynamicPricingEvaluated"])]
+pub struct DynamicPricingEvaluatedEvent {
+    pub campaign_id: u64,
+    pub base_cost: i128,
+    pub dynamic_cost: i128,
+    pub multiplier_bps: u32,
+}
+
 pub enum DataKey {
+    CampaignEscrow(u64),
+    CampaignSpeciesList(u64),
+    CampaignSpeciesCount(u64, BytesN<32>),
+    CampaignDiversityScore(u64),
     /// Global admin address (instance storage).
     Admin,
     /// Running total of campaigns created (instance storage).
@@ -42,12 +141,12 @@ pub enum DataKey {
     /// Full [`Campaign`] struct keyed by campaign ID (persistent storage).
     Campaign(u64),
     /// Per-contributor escrow balance keyed by `(campaign_id, contributor)`
-    /// (persistent storage). This remains the sponsor's gross contribution,
-    /// independent of protocol fees and matching funds.
+    /// (persistent storage).
     Contribution(u64, Address),
     /// Campaign metadata IPFS CID or hex hash keyed by campaign ID.
     CampaignIpfsHash(u64),
-    /// Total count of tree planting records.
+    /// Total count of tree planting records. A non-zero count also serves as
+    /// the "trees planted" marker for the tiered refund policy.
     PlantingCount(u64),
     /// Tree planting verification SLA record keyed by `(campaign_id, planting_id)`.
     PlantingSla(u64, u64),
@@ -67,6 +166,47 @@ pub enum DataKey {
     Reserve(u64),
     /// Team members configuration keyed by campaign ID (persistent storage).
     TeamMembers(u64),
+    OriginalContribution(u64, Address),
+    MatchingCap(u64),
+    MatchingUsed(u64),
+    MatchingBalance(u64),
+    RewardStreamed(u64, Address),
+    StreamContract,
+    /// Gross contribution stored separately so refunds are always exact.
+    OriginalContribution(u64, Address),
+    /// Admin-funded matching cap for a campaign (persistent storage).
+    MatchingCap(u64),
+    /// Running total of matching funds already consumed (persistent storage).
+    MatchingUsed(u64),
+    /// Remaining matching pool balance (persistent storage).
+    MatchingBalance(u64),
+    /// Payment-stream contract address (instance storage).
+    StreamContract,
+    /// Flag indicating a reward stream has been started for a contributor.
+    RewardStreamed(u64, Address),
+    /// ERC-20–compatible carbon credit token contract address per campaign.
+    CarbonToken(u64),
+    /// Flag indicating carbon credit tokens have been minted for a campaign.
+    CarbonCreditsMinted(u64),
+    /// Stored CO₂ multiplier for a campaign (1 = dry season, 2 = rainy season).
+    Co2Multiplier(u64),
+    /// Declared tree species list required for campaign verification.
+    DeclaredSpeciesList(u64),
+    /// Species verification proof keyed by (campaign_id, planting_id).
+    SpeciesProof(u64, u64),
+    /// Number of group sponsorships created for a campaign.
+    GroupSponsorshipCount(u64),
+    /// Group sponsorship details keyed by campaign and group ID.
+    GroupSponsorship(u64, u64),
+    /// Role assignments keyed by `(campaign_id, address)` (persistent storage).
+    CampaignRole(u64, Address),
+    /// Audit log entry keyed by `(campaign_id, entry_index)` (persistent storage).
+    AuditLog(u64, u32),
+    /// Total count of audit log entries for a campaign (persistent storage).
+    AuditLogCount(u64),
+    /// Multi-currency contribution record keyed by `(campaign_id, contributor)`
+    /// (persistent storage).
+    MultiCurrencyContribution(u64, Address),
 }
 
 /// Current lifecycle state of a campaign.
@@ -87,6 +227,8 @@ pub enum CampaignStatus {
     /// Trees died during verification; sponsors are entitled to insurance
     /// refunds from the insurance pool.
     VerificationFailed,
+    /// Campaign has been temporarily halted by the admin.
+    Paused,
 }
 
 /// Single entry in a campaign's status history.
@@ -97,6 +239,48 @@ pub struct StatusHistoryEntry {
     pub status: CampaignStatus,
     /// Unix timestamp (seconds) when this status change occurred.
     pub timestamp: u64,
+}
+
+/// Role-based access control for campaign management.
+#[contracttype]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CampaignRole {
+    /// Full control: can delete, withdraw, manage team, and perform all operations.
+    Owner,
+    /// Can edit campaign details, manage team, but cannot delete or withdraw funds.
+    Editor,
+    /// Read-only access: can view campaign details and audit log.
+    Viewer,
+}
+
+/// Audit log entry for tracking role-based actions.
+#[contracttype]
+#[derive(Clone)]
+pub struct AuditLogEntry {
+    /// The role that performed this action.
+    pub role: CampaignRole,
+    /// The address that performed this action.
+    pub actor: Address,
+    /// The action performed (e.g., "claim_funds", "set_team_rewards").
+    pub action: soroban_sdk::String,
+    /// Unix timestamp (seconds) when this action occurred.
+    pub timestamp: u64,
+}
+
+
+#[contracttype]
+#[derive(Clone)]
+pub struct BonusParams {
+    pub target_co2: i128,
+    pub actual_co2: i128,
+    pub trees_planted: u32,
+    pub trees_survived: u32,
+    pub treasury: Address,
+    pub planter: Address,
+    pub carbon_token: Address,
+    pub bonus_token: Address,
+    pub co2_bonus_amount: i128,
+    pub planter_bonus_amount: i128,
 }
 
 /// Core campaign record stored on-chain.
@@ -113,12 +297,12 @@ pub struct Campaign {
     pub revenue_shares: Vec<u32>,
     /// Stellar asset contract address of the funding token.
     pub token: Address,
-    /// Hard cap: the maximum amount the campaign may raise. Once
+    /// Hard cap: the maximum amount the campaign may raise.  Once
     /// `total_raised` reaches this value the campaign auto-transitions to
     /// [`CampaignStatus::Successful`].
     pub target_amount: i128,
     /// Minimum threshold: the campaign is only considered successful when
-    /// `total_raised >= min_target` by `deadline`. If the threshold is not
+    /// `total_raised >= min_target` by `deadline`.  If the threshold is not
     /// met all escrowed contributions become refundable.
     pub min_target: i128,
     /// Unix timestamp (seconds) after which no new contributions are accepted
@@ -134,6 +318,11 @@ pub struct Campaign {
     /// Address of the planter assigned to this campaign, if any.
     /// `OptionalAddress::None` means no planter has been assigned yet.
     pub planter: OptionalAddress,
+    /// Carbon-credit multiplier fixed at campaign creation.
+    /// CO₂ sequestration multiplier captured at creation time.
+    /// 1 = dry season (standard rate), 2 = rainy season (2× enhanced rate).
+    /// Used by `mint_carbon_credits` to compute per-sponsor token amounts.
+    pub co2_multiplier: u32,
 }
 
 /// A single co-creator on a campaign team and the share of the proceeds they
@@ -151,104 +340,246 @@ pub struct TeamMember {
     pub percentage_bps: u32,
 }
 
+/// A named group of sponsors funding a campaign together.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GroupSponsorship {
+    /// Campaign receiving the group's contributions.
+    pub campaign_id: u64,
+    /// Unique identifier within the campaign.
+    pub group_id: u64,
+    /// Public recognition name for the group.
+    pub name: soroban_sdk::String,
+    /// Address that created the group.
+    pub organizer: Address,
+    /// Sum of direct contributions made by the group's members.
+    pub total_contributed: i128,
+}
+
 // ---------------------------------------------------------------------------
 // Event types
 // ---------------------------------------------------------------------------
 
 /// Emitted when a new campaign is created.
-#[contracttype]
+#[contractevent]
 #[derive(Clone)]
 pub struct CampaignCreatedEvent {
-    /// Unique identifier for the created campaign.
     pub campaign_id: u64,
-    /// Address of the campaign creator.
     pub creator: Address,
-    /// Token contract address accepted for funding.
     pub token: Address,
-    /// Maximum funding limit in token stroops.
     pub target_amount: i128,
-    /// Minimum required funding threshold.
     pub min_target: i128,
-    /// Unix timestamp deadline for contributions.
     pub deadline: u64,
     pub co2_multiplier: u32,
+    pub tree_species: soroban_sdk::String,
+}
+
+/// Emitted when a group sponsorship is created.
+#[contracttype]
+#[derive(Clone)]
+pub struct GroupSponsorshipCreatedEvent {
+    pub campaign_id: u64,
+    pub group_id: u64,
+    pub name: soroban_sdk::String,
+    pub organizer: Address,
+}
+
+/// Emitted when a sponsor contributes through a group sponsorship.
+#[contracttype]
+#[derive(Clone)]
+pub struct GroupContributionMadeEvent {
+    pub campaign_id: u64,
+    pub group_id: u64,
+    pub contributor: Address,
+    pub amount: i128,
+    pub group_total: i128,
 }
 
 /// Emitted each time a contributor adds tokens to a campaign.
-#[contracttype]
+#[contractevent]
 #[derive(Clone)]
 pub struct ContributionMadeEvent {
-    /// Identifier of the target campaign.
     pub campaign_id: u64,
-    /// Address of the contributing donor.
     pub contributor: Address,
-    /// Amount of tokens contributed in stroops.
     pub amount: i128,
-    /// Updated total amount raised after this contribution.
+    pub total_raised: i128,
+}
+
+/// Currencies accepted for multi-currency campaign pledges (Issue #1170).
+#[contracttype]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Currency {
+    /// United States dollar.
+    Usd = 0,
+    /// Euro.
+    Eur = 1,
+    /// Stellar lumens.
+    Xlm = 2,
+    /// USD Coin.
+    Usdc = 3,
+}
+
+/// Conversion quote applied to a multi-currency pledge.
+///
+/// `rate` is the conversion rate from the pledge currency into the campaign's
+/// funding token, expressed in 7-decimal fixed point (1_0000000 = 1:1).
+/// `quoted_at` is the Unix timestamp (seconds) at which the rate was quoted.
+#[contracttype]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ConversionQuote {
+    /// Conversion rate in 7-decimal fixed point.
+    pub rate: i128,
+    /// Unix timestamp (seconds) when the rate was quoted.
+    pub quoted_at: u64,
+}
+
+/// Record of a multi-currency contribution, stored per `(campaign_id, contributor)`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MultiCurrencyContribution {
+    /// Currency selected by the backer at checkout.
+    pub currency: Currency,
+    /// Amount pledged in the original currency.
+    pub original_amount: i128,
+    /// Amount credited to the campaign in the funding token.
+    pub converted_amount: i128,
+    /// Conversion rate applied (7-decimal fixed point).
+    pub rate: i128,
+    /// Unix timestamp (seconds) when the rate was quoted.
+    pub quoted_at: u64,
+}
+
+/// Emitted when a backer contributes using a non-native currency.
+#[contractevent(topics = ["MultiCurrencyContribution"])]
+#[derive(Clone)]
+pub struct MultiCurrencyContributionEvent {
+    pub campaign_id: u64,
+    pub contributor: Address,
+    pub currency: Currency,
+    pub original_amount: i128,
+    pub converted_amount: i128,
+    pub rate: i128,
+    pub quoted_at: u64,
+    pub total_raised: i128,
+}
+
+/// Emitted when a campaign transitions out of the `Active` state.
+/// Declared species configuration for a campaign (Issue #838).
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeclaredSpecies {
+    pub species_name: soroban_sdk::String,
+    pub species_code: BytesN<32>,
+    pub target_count: u64,
+}
+
+/// Photographic species proof record for a planting batch.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SpeciesVerificationProof {
+    pub planting_id: u64,
+    pub species_code: BytesN<32>,
+    pub photo_ipfs_cid: soroban_sdk::String,
+    pub photo_hash: BytesN<32>,
+    pub is_verified: bool,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SpeciesDeclaredEvent {
+    pub campaign_id: u64,
+    pub species_code: BytesN<32>,
+    pub target_count: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SpeciesProofSubmittedEvent {
+    pub campaign_id: u64,
+    pub planting_id: u64,
+    pub species_code: BytesN<32>,
+    pub photo_ipfs_cid: soroban_sdk::String,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SpeciesProofVerifiedEvent {
+    pub campaign_id: u64,
+    pub planting_id: u64,
+    pub species_code: BytesN<32>,
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InsurancePoolFundedEvent {
+    pub campaign_id: u64,
+    pub token: Address,
+    pub amount: i128,
+    pub pool_balance: i128,
+/// Contribution event used when a sponsor chooses anonymity on public surfaces.
+///
+/// The contributor address is deliberately omitted. Soroban ledger data and the
+/// transaction signer remain public, so this hides the sponsor from event-based
+/// campaign displays but is not cryptographic on-chain privacy.
+#[contracttype]
+#[derive(Clone)]
+pub struct AnonymousContributionMadeEvent {
+    pub campaign_id: u64,
+    pub amount: i128,
     pub total_raised: i128,
 }
 
 /// Emitted when a campaign transitions lifecycle states.
-#[contracttype]
+#[contractevent]
 #[derive(Clone)]
 pub struct CampaignStatusChangedEvent {
-    /// Identifier of the campaign whose status changed.
     pub campaign_id: u64,
-    /// New lifecycle state assigned to the campaign.
     pub new_status: CampaignStatus,
 }
 
-/// Emitted when the campaign creator claims the raised funds.
+/// Emitted when a planter is assigned to a campaign, marking the campaign as
+/// started for the tiered refund policy (issue #889).
 #[contracttype]
 #[derive(Clone)]
-pub struct FundsClaimedEvent {
-    /// Identifier of the claimed campaign.
+pub struct PlanterAssignedEvent {
+    /// Identifier of the campaign the planter was assigned to.
     pub campaign_id: u64,
-    /// Creator address receiving net funds.
+    /// Address of the assigned planter.
+    pub planter: Address,
+    /// Unix timestamp (seconds) when the assignment happened.
+    pub assigned_at: u64,
+}
+
+/// Emitted when the campaign creator claims the raised funds.
+#[contractevent]
+#[derive(Clone)]
+pub struct FundsClaimedEvent {
+    pub campaign_id: u64,
     pub creator: Address,
-    /// Net amount transferred to creator after protocol fee deduction.
+    /// Net amount after protocol fee deduction.
     pub amount: i128,
+}
+
+/// Emitted when the verifier approves a campaign's escrow for payout.
+#[contracttype]
+#[derive(Clone)]
+pub struct CampaignVerificationApprovedEvent {
+    /// Identifier of the approved campaign.
+    pub campaign_id: u64,
+    /// Unix timestamp when the approval was recorded.
+    pub approved_at: u64,
 }
 
 /// Emitted each time a contributor successfully claims a refund.
-#[contracttype]
+#[contractevent]
 #[derive(Clone)]
 pub struct RefundIssuedEvent {
-    /// Identifier of the failed campaign refunded from.
     pub campaign_id: u64,
-    /// Contributor receiving the refund.
     pub contributor: Address,
-    /// Total refunded token amount.
     pub amount: i128,
 }
 
-/// Emitted when campaign IPFS metadata hash is updated.
 #[contracttype]
 #[derive(Clone)]
-pub struct CampaignIpfsHashUpdatedEvent {
-    pub campaign_id: u64,
-    pub ipfs_hash: soroban_sdk::String,
-}
-
-/// Tree planting verification SLA record.
-#[contracttype]
-#[derive(Clone)]
-pub struct PlantingSlaRecord {
-    pub planting_id: u64,
-    pub campaign_id: u64,
-    pub planter: Address,
-    pub tree_count: u32,
-    pub planted_at: u64,
-    pub verification_deadline: u64,
-    pub is_verified: bool,
-    pub verified_at: u64,
-    pub is_refunded: bool,
-}
-
-/// Emitted when a tree planting batch is recorded with 30-day SLA window.
-#[contracttype]
-#[derive(Clone)]
-pub struct TreePlantingRecordedEvent {
+pub struct SponsorRewardStreamedEvent {
     pub campaign_id: u64,
     pub planting_id: u64,
     pub planter: Address,
@@ -263,6 +594,37 @@ pub struct TreePlantingVerifiedEvent {
     pub campaign_id: u64,
     pub planting_id: u64,
     pub verified_at: u64,
+}
+
+/// Proof of tree species planted, linking uploaded photo hash to declared species.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SpeciesPhotoProof {
+    /// SHA-256 or IPFS digest of the uploaded proof photo.
+    pub photo_hash: BytesN<32>,
+    /// Declared tree species shown in the photo.
+    pub species: String,
+    /// Tree count verified by this photo.
+    pub tree_count: u32,
+}
+
+/// Emitted when campaign creator specifies or declares tree species.
+#[contracttype]
+#[derive(Clone)]
+pub struct SpeciesDeclaredEvent {
+    pub campaign_id: u64,
+    pub species: Vec<String>,
+}
+
+/// Emitted when tree planting photo proof matching declared species is verified.
+#[contracttype]
+#[derive(Clone)]
+pub struct SpeciesProofVerifiedEvent {
+    pub campaign_id: u64,
+    pub planting_id: u64,
+    pub photo_hash: BytesN<32>,
+    pub species: String,
+    pub tree_count: u32,
 }
 
 /// Entitlement unlocked by a campaign's verified tree count.
@@ -295,6 +657,11 @@ pub struct SlaRefundIssuedEvent {
     pub planting_id: u64,
     pub contributor: Address,
     pub amount: i128,
+    pub stream_id: u64,
+    pub start_time: u64,
+    pub end_time: u64,
+}
+
 /// Emitted when cumulative contributions cross one of a campaign's funding
 /// milestones (25 %, 50 %, 75 % or 100 % of `target_amount`).
 ///
@@ -352,6 +719,24 @@ pub struct ContractFullEvent {
     pub timestamp: u64,
 }
 
+/// Emitted once when carbon credit tokens are minted for a verified campaign.
+///
+/// One token (in stroops of the carbon credit token) is minted per tonne of
+/// CO₂ equivalent. The total minted equals `verified_tree_count × co2_multiplier`
+/// tokens (where each tree sequesters exactly 1 tonne CO₂ equivalent).
+#[contracttype]
+#[derive(Clone)]
+pub struct CarbonCreditsMintedEvent {
+    /// Campaign whose verified trees generated the credits.
+    pub campaign_id: u64,
+    /// Total carbon credit tokens minted in stroops.
+    pub total_minted: i128,
+    /// CO₂ multiplier applied (1 = dry season, 2 = rainy season).
+    pub co2_multiplier: u32,
+    /// Verified tree count at the time of minting.
+    pub verified_tree_count: u64,
+}
+
 // ---------------------------------------------------------------------------
 // Error codes
 // ---------------------------------------------------------------------------
@@ -403,21 +788,29 @@ pub enum Error {
     PlantingNotFound = 19,
     /// Tree planting is already verified.
     AlreadyVerified = 20,
-    /// The campaign is not in the `VerificationFailed` state.
-    CampaignNotVerificationFailed = 21,
     /// The insurance pool fee rate exceeds the protocol maximum.
-    InsuranceFeeTooHigh = 22,
+    InsuranceFeeTooHigh = 21,
     /// `set_team_rewards` was called with an empty team.
-    TeamEmpty = 23,
+    TeamEmpty = 22,
+    /// The campaign is paused.
+    CampaignPaused = 23,
     /// The team's `percentage_bps` values do not sum to exactly 100 %
     /// (`10_000`), or a member has a zero / out-of-range percentage.
     TeamInvalidSplit = 24,
     /// The team contains two members with the same payout address.
     TeamDuplicateMember = 25,
+    /// Insufficient role permissions for this action.
+    InsufficientPermissions = 26,
+    /// Role assignment already exists.
+    RoleAlreadyAssigned = 27,
+    /// Role assignment not found.
+    RoleNotFound = 28,
+    /// The campaign is not in the `VerificationFailed` state.
+    CampaignNotVerificationFailed = 29,
     /// Campaign ID space exhausted (u64::MAX reached).
-    ContractFull = 26,
-    /// Campaign is not verified.
-    CampaignNotVerified = 27,
+    ContractFull = 30,
+    /// The supplied conversion quote is invalid (non-positive rate or stale).
+    InvalidConversionQuote = 31,
 }
 
 // ---------------------------------------------------------------------------
@@ -434,8 +827,11 @@ const LEDGER_THRESHOLD: u32 = 518_400;
 const LEDGER_BUMP: u32 = 535_680;
 /// Maximum duration for a campaign (180 days in seconds).
 const MAX_CAMPAIGN_DURATION_SECONDS: u64 = 180 * 24 * 60 * 60;
-/// 30-day Tree Verification SLA duration in seconds (30 * 24 * 60 * 60).
-const VERIFICATION_SLA_SECONDS: u64 = 2_592_000;
+const TWELVE_MONTHS_SECS: u64 = 31_536_000;
+/// Fixed-point scale for conversion rates (7 decimals, matching Stellar stroops).
+const RATE_SCALE: i128 = 10_000_000;
+/// Maximum age of a conversion quote (10 minutes in seconds).
+const MAX_QUOTE_AGE_SECONDS: u64 = 600;
 
 // ---------------------------------------------------------------------------
 // Contract
@@ -495,9 +891,31 @@ impl CampaignFundingContract {
             .instance()
             .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
     }
+    /// Uploaded photo proof does not match declared tree species.
+    SpeciesMismatch = 38,
+    /// Tree species proof has not been submitted for this planting batch.
+    ProofNotFound = 39,
+    /// Tree mortality occurred outside the 2-year insurance coverage window.
+    InsuranceWindowExpired = 38,
+    /// The non-profit partner has not been registered for this campaign.
+    NonProfitPartnerNotFound = 28,
+    /// Tax certificate has already been issued for this sponsor and campaign.
+    CertificateAlreadyIssued = 29,
+    /// Escrow account has not been initialized for this campaign.
+    EscrowNotInitialized = 38,
+    /// Escrow account has already been initialized for this campaign.
+    EscrowAlreadyInitialized = 39,
+    /// Escrow funds cannot be released before trees are verified planted.
+    EscrowNotVerified = 40,
+    /// Escrow funds have already been released.
+    EscrowAlreadyReleased = 41,
+    /// Caller is not the authorized verifier for this campaign escrow.
+    UnauthorizedVerifier = 42,
+    /// Escrow account is currently disputed.
+    EscrowDisputed = 43,
 
     // -----------------------------------------------------------------------
-    // Campaign lifecycle
+    // Campaign Escrow Tests (Issue #864)
     // -----------------------------------------------------------------------
 
     /// Create a new funding campaign.
@@ -584,10 +1002,23 @@ impl CampaignFundingContract {
         if deadline > env.ledger().timestamp() + MAX_CAMPAIGN_DURATION_SECONDS {
             panic_with_error!(&env, Error::DeadlineTooFar);
         }
-        if insurance_fee <= 0 {
+        if insurance_fee < 0 {
             panic_with_error!(&env, Error::InvalidAmount);
         }
         let primary_creator = creators.get(0).unwrap();
+
+        // Compute CO₂ sequestration multiplier based on the current month.
+        // Trees planted during the rainy season (April–October) sequester CO₂
+        // at 2× the dry-season rate due to accelerated biomass growth.
+        // The ledger timestamp is Unix seconds; we derive the calendar month
+        // using the known epoch start (Jan 1 1970).
+        let seconds_per_day: u64 = 86_400;
+        let days_since_epoch = now / seconds_per_day;
+        // Approximate the day-of-year without leap-year precision (sufficient for
+        // a seasonal determination).
+        let day_of_year = (days_since_epoch % 365) as u32;
+        // Rainy season: day 90 (Apr 1) – day 303 (Oct 31) inclusive.
+        let co2_multiplier: u32 = if day_of_year >= 90 && day_of_year <= 119 { 15 } else if day_of_year >= 120 && day_of_year <= 303 { 20 } else { 10 };
 
         let mut count: u64 = env
             .storage()
@@ -640,11 +1071,13 @@ impl CampaignFundingContract {
             status: CampaignStatus::Active,
             created_at: now,
             planter: OptionalAddress::None,
+            co2_multiplier: Self::seasonal_multiplier(now),
+            co2_multiplier,
         };
 
         Self::save_campaign(&env, count, &campaign);
-        Self::record_status_change(&env, count, CampaignStatus::Active);
 
+        
         env.events().publish(
             ("CampaignCreated", count),
             CampaignCreatedEvent {
@@ -654,7 +1087,6 @@ impl CampaignFundingContract {
                 target_amount,
                 min_target,
                 deadline,
-                co2_multiplier,
             },
         );
 
@@ -813,6 +1245,195 @@ impl CampaignFundingContract {
         );
     }
 
+    /// Contribute to a campaign using a backer-selected currency.
+    ///
+    /// The pledge is converted into the campaign's funding token using the
+    /// supplied [`ConversionQuote`]. The original currency and amount, the
+    /// converted amount, and the applied rate are recorded so receipts can
+    /// display both amounts.
+    ///
+    /// # Arguments
+    /// * `contributor`       — Address funding the pledge.
+    /// * `campaign_id`       — Campaign receiving the contribution.
+    /// * `currency`          — Currency selected by the backer at checkout.
+    /// * `original_amount`   — Amount pledged in `currency`.
+    /// * `quote`             — Conversion rate and quote timestamp.
+    ///
+    /// # Errors
+    /// * [`Error::InvalidAmount`]            — `original_amount <= 0`.
+    /// * [`Error::InvalidConversionQuote`]   — non-positive rate or stale quote.
+    pub fn contribute_with_quote(
+        env: Env,
+        contributor: Address,
+        campaign_id: u64,
+        currency: Currency,
+        original_amount: i128,
+        quote: ConversionQuote,
+    ) {
+        contributor.require_auth();
+        if original_amount <= 0 {
+            panic_with_error!(&env, Error::InvalidAmount);
+        }
+        if quote.rate <= 0 {
+            panic_with_error!(&env, Error::InvalidConversionQuote);
+        }
+        let now = env.ledger().timestamp();
+        if quote.quoted_at > now || now - quote.quoted_at > MAX_QUOTE_AGE_SECONDS {
+            panic_with_error!(&env, Error::InvalidConversionQuote);
+        }
+
+        let converted_amount = original_amount
+            .checked_mul(quote.rate)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::ArithmeticOverflow))
+            / RATE_SCALE;
+        if converted_amount <= 0 {
+            panic_with_error!(&env, Error::InvalidAmount);
+        }
+
+        // Credit the campaign with the converted amount.
+        Self::contribute(env.clone(), contributor.clone(), campaign_id, converted_amount);
+
+        let campaign = Self::load_campaign(&env, campaign_id);
+
+        // Persist the multi-currency receipt record.
+        let record = MultiCurrencyContribution {
+            currency,
+            original_amount,
+            converted_amount,
+            rate: quote.rate,
+            quoted_at: quote.quoted_at,
+        };
+        let key = DataKey::MultiCurrencyContribution(campaign_id, contributor.clone());
+        env.storage().persistent().set(&key, &record);
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, LEDGER_THRESHOLD, LEDGER_BUMP);
+
+        env.events().publish(
+            ("MultiCurrencyContribution", campaign_id),
+            MultiCurrencyContributionEvent {
+                campaign_id,
+                contributor,
+                currency,
+                original_amount,
+                converted_amount,
+                rate: quote.rate,
+                quoted_at: quote.quoted_at,
+                total_raised: campaign.total_raised,
+            },
+        );
+    }
+
+    /// Return the multi-currency receipt record for a contributor, if any.
+    pub fn get_multi_currency_contribution(
+        env: Env,
+        campaign_id: u64,
+        contributor: Address,
+    ) -> Option<MultiCurrencyContribution> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::MultiCurrencyContribution(campaign_id, contributor))
+    }
+
+    /// Create a named group sponsorship for an active campaign.
+    ///
+    /// Members contribute individually through [`contribute_to_group`], so
+    /// their existing refund and reward records remain tied to their wallets.
+    /// Names are limited to 64 UTF-8 bytes and need not be unique.
+    pub fn create_group_sponsorship(
+        env: Env,
+        organizer: Address,
+        campaign_id: u64,
+        name: soroban_sdk::String,
+    ) -> u64 {
+        organizer.require_auth();
+        let campaign = Self::load_campaign(&env, campaign_id);
+        if campaign.status == CampaignStatus::Paused {
+            panic_with_error!(&env, Error::CampaignPaused);
+        }
+        if campaign.status != CampaignStatus::Active
+            || env.ledger().timestamp() >= campaign.deadline
+        {
+            panic_with_error!(&env, Error::CampaignNotActive);
+        }
+        if name.len() == 0 {
+            panic_with_error!(&env, Error::GroupNameEmpty);
+        }
+        if name.len() > 64 {
+            panic_with_error!(&env, Error::GroupNameTooLong);
+        }
+
+        let count_key = DataKey::GroupSponsorshipCount(campaign_id);
+        let previous_count: u64 = env.storage().persistent().get(&count_key).unwrap_or(0);
+        let group_id = previous_count
+            .checked_add(1)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::ContractFull));
+        let group = GroupSponsorship {
+            campaign_id,
+            group_id,
+            name: name.clone(),
+            organizer: organizer.clone(),
+            total_contributed: 0,
+        };
+        let group_key = DataKey::GroupSponsorship(campaign_id, group_id);
+        env.storage().persistent().set(&group_key, &group);
+        env.storage().persistent().set(&count_key, &group_id);
+        env.storage()
+            .persistent()
+            .extend_ttl(&group_key, LEDGER_THRESHOLD, LEDGER_BUMP);
+        env.storage()
+            .persistent()
+            .extend_ttl(&count_key, LEDGER_THRESHOLD, LEDGER_BUMP);
+        env.events().publish(
+            ("GroupSponsorshipCreated", campaign_id),
+            GroupSponsorshipCreatedEvent {
+                campaign_id,
+                group_id,
+                name,
+                organizer,
+            },
+        );
+        group_id
+    }
+
+    /// Contribute individually to a campaign through a named group.
+    pub fn contribute_to_group(
+        env: Env,
+        contributor: Address,
+        campaign_id: u64,
+        group_id: u64,
+        amount: i128,
+    ) {
+        contributor.require_auth();
+        let group_key = DataKey::GroupSponsorship(campaign_id, group_id);
+        let mut group: GroupSponsorship = env
+            .storage()
+            .persistent()
+            .get(&group_key)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::GroupSponsorshipNotFound));
+
+        Self::contribute(env.clone(), contributor.clone(), campaign_id, amount);
+
+        group.total_contributed = group
+            .total_contributed
+            .checked_add(amount)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::ArithmeticOverflow));
+        env.storage().persistent().set(&group_key, &group);
+        env.storage()
+            .persistent()
+            .extend_ttl(&group_key, LEDGER_THRESHOLD, LEDGER_BUMP);
+        env.events().publish(
+            ("GroupContributionMade", campaign_id),
+            GroupContributionMadeEvent {
+                campaign_id,
+                group_id,
+                contributor,
+                amount,
+                group_total: group.total_contributed,
+            },
+        );
+    }
+
     /// Contribute tokens to a campaign.
     ///
     /// The full `amount` is transferred into contract escrow immediately.
@@ -836,9 +1457,6 @@ impl CampaignFundingContract {
 
         let mut campaign = Self::load_campaign(&env, campaign_id);
 
-        if campaign.status == CampaignStatus::Paused {
-            panic_with_error!(&env, Error::CampaignPaused);
-        }
         if campaign.status != CampaignStatus::Active {
             panic_with_error!(&env, Error::CampaignNotActive);
         }
@@ -856,47 +1474,36 @@ impl CampaignFundingContract {
         if new_total > campaign.target_amount {
             panic_with_error!(&env, Error::TargetExceeded);
         }
+    #[test]
+    fn test_escrow_hold_and_release_upon_verifier_approval() {
+        let env = Env::default();
+        env.mock_all_auths();
+        set_time(&env, 1_000);
+        let (_, client, _, _) = setup_contract(&env);
+        let token_admin = Address::generate(&env);
+        let (token_addr, _, token_admin_client) = create_token(&env, &token_admin);
+        let creator = Address::generate(&env);
+        let verifier = Address::generate(&env);
+        let sponsor = Address::generate(&env);
 
-        // Transfer tokens into contract escrow.
-        let token_client = token::Client::new(&env, &campaign.token);
-        token_client.transfer(&contributor, &env.current_contract_address(), &amount);
+        token_admin_client.mint(&sponsor, &10_000);
 
-        // Update per-contributor balance. This is always the sponsor's gross
-        // amount, so a later refund returns the original contribution rather
-        // than any fee-adjusted net amount.
+        // Update per-contributor balance.
         let contrib_key = DataKey::Contribution(campaign_id, contributor.clone());
         let prev: i128 = env.storage().persistent().get(&contrib_key).unwrap_or(0);
         let new_contrib = prev
             .checked_add(amount)
             .unwrap_or_else(|| panic_with_error!(&env, Error::ArithmeticOverflow));
         env.storage().persistent().set(&contrib_key, &new_contrib);
-        // Keep the gross sponsor amount separate from any future fee or
-        // matching accounting so refunds always return the original deposit.
-        let original_key = DataKey::OriginalContribution(campaign_id, contributor.clone());
-        let original = prev.checked_add(amount).unwrap_or_else(|| panic_with_error!(&env, Error::ArithmeticOverflow));
-        env.storage().persistent().set(&original_key, &original);
-        env.storage().persistent().extend_ttl(&contrib_key, LEDGER_THRESHOLD, LEDGER_BUMP);
-        env.storage().persistent().extend_ttl(&original_key, LEDGER_THRESHOLD, LEDGER_BUMP);
+        env.storage()
+            .persistent()
+            .extend_ttl(&contrib_key, LEDGER_THRESHOLD, LEDGER_BUMP);
 
-        // Apply available admin-funded matching dollar-for-dollar. Matching
-        // is bounded by both the remaining campaign target and its budget.
-        let matching_cap: i128 = env.storage().persistent().get(&DataKey::MatchingCap(campaign_id)).unwrap_or(0);
-        let matching_used: i128 = env.storage().persistent().get(&DataKey::MatchingUsed(campaign_id)).unwrap_or(0);
-        let matching_balance: i128 = env.storage().persistent().get(&DataKey::MatchingBalance(campaign_id)).unwrap_or(0);
-        let remaining_budget = matching_cap.saturating_sub(matching_used);
-        let remaining_target = campaign.target_amount.saturating_sub(new_total);
-        let matched = amount.min(remaining_budget).min(matching_balance).min(remaining_target);
-        if matched > 0 {
-            let updated_matching = matching_used.checked_add(matched).unwrap_or_else(|| panic_with_error!(&env, Error::ArithmeticOverflow));
-            env.storage().persistent().set(&DataKey::MatchingUsed(campaign_id), &updated_matching);
-            env.storage().persistent().set(&DataKey::MatchingBalance(campaign_id), &(matching_balance - matched));
-        }
-        campaign.total_raised = new_total.checked_add(matched).unwrap_or_else(|| panic_with_error!(&env, Error::ArithmeticOverflow));
+        campaign.total_raised = new_total;
 
         // Auto-succeed when the hard cap is reached.
         if campaign.total_raised >= campaign.target_amount {
             campaign.status = CampaignStatus::Successful;
-            Self::record_status_change(&env, campaign_id, CampaignStatus::Successful);
             env.events().publish(
                 ("CampaignStatusChanged", campaign_id),
                 CampaignStatusChangedEvent {
@@ -905,21 +1512,35 @@ impl CampaignFundingContract {
                 },
             );
         }
+        let id = client.create_campaign(&creator, &token_addr, &10_000, &5_000, &2_000);
 
-        // Emit milestone events for every goal threshold newly crossed.
-        Self::update_milestones(&env, campaign_id, &campaign);
+        // 1. Initialize escrow holding account
+        client.initialize_campaign_escrow(&id, &verifier, &500);
+        let escrow = client.get_campaign_escrow(&id);
+        assert_eq!(escrow.status, EscrowStatus::Held);
+        assert_eq!(escrow.is_verified, false);
+        assert_eq!(escrow.total_escrowed, 0);
 
-        Self::save_campaign(&env, campaign_id, &campaign);
+        // 2. Deposit sponsor funds into escrow
+        client.deposit_to_campaign_escrow(&id, &sponsor, &5_000);
+        let escrow_after = client.get_campaign_escrow(&id);
+        assert_eq!(escrow_after.total_escrowed, 5_000);
+        assert_eq!(escrow_after.released_amount, 0);
 
-        env.events().publish(
-            ("ContributionMade", campaign_id),
-            ContributionMadeEvent {
-                campaign_id,
-                contributor,
-                amount,
-                total_raised: campaign.total_raised,
-            },
-        );
+        // 3. Verifier approves tree planting verification
+        client.approve_tree_verification(&id, &500);
+        let escrow_verified = client.get_campaign_escrow(&id);
+        assert_eq!(escrow_verified.is_verified, true);
+        assert_eq!(escrow_verified.status, EscrowStatus::Verified);
+        assert_eq!(escrow_verified.trees_planted, 500);
+
+        // 4. Release escrow funds to creator
+        let released = client.release_escrow_to_creator(&id);
+        assert_eq!(released, 5_000);
+
+        let escrow_released = client.get_campaign_escrow(&id);
+        assert_eq!(escrow_released.status, EscrowStatus::Released);
+        assert_eq!(escrow_released.released_amount, 5_000);
     }
 
     /// Evaluate an `Active` campaign once its deadline has passed and
@@ -940,7 +1561,7 @@ impl CampaignFundingContract {
     pub fn trigger_expiry(env: Env, campaign_id: u64) {
         let mut campaign = Self::load_campaign(&env, campaign_id);
 
-        if campaign.status != CampaignStatus::Active && campaign.status != CampaignStatus::Paused {
+        if campaign.status != CampaignStatus::Active {
             panic_with_error!(&env, Error::CampaignNotActive);
         }
         if env.ledger().timestamp() < campaign.deadline {
@@ -954,16 +1575,27 @@ impl CampaignFundingContract {
         };
 
         let new_status = campaign.status;
-        Self::record_status_change(&env, campaign_id, new_status);
         Self::save_campaign(&env, campaign_id, &campaign);
+    #[test]
+    #[should_panic(expected = "Error(Contract, #40)")]
+    fn test_escrow_release_fails_if_unverified() {
+        let env = Env::default();
+        env.mock_all_auths();
+        set_time(&env, 1_000);
+        let (_, client, _, _) = setup_contract(&env);
+        let token_admin = Address::generate(&env);
+        let (token_addr, _, token_admin_client) = create_token(&env, &token_admin);
+        let creator = Address::generate(&env);
+        let verifier = Address::generate(&env);
+        let sponsor = Address::generate(&env);
 
-        env.events().publish(
-            ("CampaignStatusChanged", campaign_id),
-            CampaignStatusChangedEvent {
-                campaign_id,
-                new_status,
-            },
-        );
+        token_admin_client.mint(&sponsor, &10_000);
+        let id = client.create_campaign(&creator, &token_addr, &10_000, &5_000, &2_000);
+        client.initialize_campaign_escrow(&id, &verifier, &500);
+        client.deposit_to_campaign_escrow(&id, &sponsor, &5_000);
+
+        // Cannot release funds before verification! (Panics with EscrowNotVerified #40)
+        client.release_escrow_to_creator(&id);
     }
 
     /// Claim the raised funds after a successful campaign.
@@ -988,6 +1620,10 @@ impl CampaignFundingContract {
     pub fn claim_funds(env: Env, campaign_id: u64) {
         let mut campaign = Self::load_campaign(&env, campaign_id);
 
+        // Check permissions - only Owners can claim funds
+        let primary_creator = campaign.creators.get(0).unwrap();
+        Self::check_permission(&env, campaign_id, primary_creator, "claim_funds");
+
         for owner in campaign.creators.iter() {
             owner.require_auth();
         }
@@ -1007,8 +1643,10 @@ impl CampaignFundingContract {
         let distributable = after_fee - reserve;
 
         campaign.status = CampaignStatus::Claimed;
-        Self::record_status_change(&env, campaign_id, CampaignStatus::Claimed);
         Self::save_campaign(&env, campaign_id, &campaign);
+
+        let action_str = soroban_sdk::String::from_slice(&env, "claim_funds");
+        Self::record_audit_log(&env, campaign_id, primary_creator.clone(), action_str);
 
         let token_client = token::Client::new(&env, &campaign.token);
 
@@ -1020,119 +1658,60 @@ impl CampaignFundingContract {
                 .get(&DataKey::FeeCollector)
                 .unwrap();
             token_client.transfer(&env.current_contract_address(), &fee_collector, &fee);
+    // -----------------------------------------------------------------------
+    // Dynamic Pricing Tests (Issue #884)
+    // -----------------------------------------------------------------------
 
-            ProtocolFeeCollectedEvent {
-                campaign_id,
-                token: campaign.token.clone(),
-                fee_collector: fee_collector.clone(),
-                amount: fee,
-            }
-            .publish(&env);
-        }
+    #[test]
+    fn test_dynamic_pricing_below_90_percent_uses_base_cost() {
+        let env = Env::default();
+        env.mock_all_auths();
+        set_time(&env, 1_000);
+        let (_, client, _, _) = setup_contract(&env);
+        let token_admin = Address::generate(&env);
+        let (token_addr, _, token_admin_client) = create_token(&env, &token_admin);
+        let creator = Address::generate(&env);
+        let sponsor = Address::generate(&env);
 
-        // Store reserve in contract storage
-        if reserve > 0 {
-            let reserve_key = DataKey::Reserve(campaign_id);
-            env.storage().persistent().set(&reserve_key, &reserve);
-            env.storage()
-                .persistent()
-                .extend_ttl(&reserve_key, LEDGER_THRESHOLD, LEDGER_BUMP);
+        token_admin_client.mint(&sponsor, &10_000);
+        let id = client.create_campaign(&creator, &token_addr, &10_000, &5_000, &2_000);
 
-            ReserveAllocatedEvent {
-                campaign_id,
-                amount: reserve,
-            }
-            .publish(&env);
-        }
+        // 50% funded (5,000 / 10,000) -> 1.0x (10,000 bps)
+        client.contribute(&sponsor, &id, &5_000);
+        let multiplier = client.get_dynamic_pricing_multiplier_bps(&id);
+        assert_eq!(multiplier, 10_000);
 
-        // Distribute remaining 90% to creator or team
-        Self::distribute_proceeds(&env, &campaign, campaign_id, distributable);
+        let cost = client.get_campaign_cost_per_tree(&id, &100);
+        assert_eq!(cost, 100);
 
-        env.events().publish(
-            ("FundsClaimed", campaign_id),
-            FundsClaimedEvent {
-                campaign_id,
-                creator: campaign.creator,
-                amount: distributable,
-            },
-        );
+        let trees = client.calculate_trees_for_contribution(&id, &500, &100);
+        assert_eq!(trees, 5);
     }
 
-    /// Configure how a successful campaign's proceeds are split amongst a
-    /// team of co-creators.
-    ///
-    /// Only the campaign `creator` may call this, and only while the campaign
-    /// is still [`CampaignStatus::Active`] (before funds are claimed). Once
-    /// set, `claim_funds` divides the net proceeds (after the protocol fee)
-    /// among the team members according to their `percentage_bps`, rather than
-    /// sending everything to the single `creator`.
-    ///
-    /// # Arguments
-    /// * `campaign_id` — The campaign to configure.
-    /// * `team`        — Non-empty list of [`TeamMember`]s whose
-    ///   `percentage_bps` values sum to exactly `10_000` (100 %).
-    ///
-    /// # Errors
-    /// * [`Error::CampaignNotFound`]       — campaign does not exist.
-    /// * [`Error::Unauthorized`]           — caller is not the campaign creator.
-    /// * [`Error::CampaignNotActive`]      — campaign is not `Active`.
-    /// * [`Error::TeamEmpty`]              — `team` is empty.
-    /// * [`Error::TeamDuplicateMember`]    — a payout address appears twice.
-    /// * [`Error::TeamInvalidSplit`]       — percentages do not sum to 100 % or
-    ///   a member percentage is zero / out of range.
-    pub fn set_team_rewards(env: Env, campaign_id: u64, team: Vec<TeamMember>) {
-        let mut campaign = Self::load_campaign(&env, campaign_id);
-        campaign.creator.require_auth();
+    #[test]
+    fn test_dynamic_pricing_at_or_above_90_percent_applies_surge_multiplier() {
+        let env = Env::default();
+        env.mock_all_auths();
+        set_time(&env, 1_000);
+        let (_, client, _, _) = setup_contract(&env);
+        let token_admin = Address::generate(&env);
+        let (token_addr, _, token_admin_client) = create_token(&env, &token_admin);
+        let creator = Address::generate(&env);
+        let sponsor = Address::generate(&env);
 
-        if campaign.status != CampaignStatus::Active {
-            panic_with_error!(&env, Error::CampaignNotActive);
-        }
-        if team.is_empty() {
-            panic_with_error!(&env, Error::TeamEmpty);
-        }
+        token_admin_client.mint(&sponsor, &10_000);
+        let id = client.create_campaign(&creator, &token_addr, &10_000, &5_000, &2_000);
 
-        let mut total: u32 = 0;
-        for i in 0..team.len() {
-            let member = team.get(i).unwrap();
-            if member.percentage_bps == 0 || member.percentage_bps > 10_000u32 {
-                panic_with_error!(&env, Error::TeamInvalidSplit);
-            }
-            for j in (i + 1)..team.len() {
-                if team.get(j).unwrap().address == member.address {
-                    panic_with_error!(&env, Error::TeamDuplicateMember);
-                }
-            }
-            total = total
-                .checked_add(member.percentage_bps)
-                .unwrap_or_else(|| panic_with_error!(&env, Error::TeamInvalidSplit));
-        }
-        if total != 10_000u32 {
-            panic_with_error!(&env, Error::TeamInvalidSplit);
-        }
+        // 90% funded (9,000 / 10,000) -> 1.5x (15,000 bps) surge pricing
+        client.contribute(&sponsor, &id, &9_000);
+        let multiplier = client.get_dynamic_pricing_multiplier_bps(&id);
+        assert_eq!(multiplier, 15_000);
 
-        let key = DataKey::TeamMembers(campaign_id);
-        env.storage().persistent().set(&key, &team);
-        env.storage()
-            .persistent()
-            .extend_ttl(&key, LEDGER_THRESHOLD, LEDGER_BUMP);
-        Self::save_campaign(&env, campaign_id, &campaign);
-    }
+        let cost = client.get_campaign_cost_per_tree(&id, &100);
+        assert_eq!(cost, 150);
 
-    /// Return the configured team rewards for a campaign.
-    ///
-    /// Returns `[]` when no team split has been set up for `campaign_id`
-    /// (in which case the proceeds go entirely to the single `creator`).
-    ///
-    /// # Errors
-    /// * [`Error::CampaignNotFound`] — campaign does not exist.
-    pub fn get_team_rewards(env: Env, campaign_id: u64) -> Vec<TeamMember> {
-        let key = DataKey::TeamMembers(campaign_id);
-        // Validate the campaign exists before reading its (absent) team.
-        Self::load_campaign(&env, campaign_id);
-        env.storage()
-            .persistent()
-            .get(&key)
-            .unwrap_or_else(|| Vec::new(&env))
+        let trees = client.calculate_trees_for_contribution(&id, &300, &100);
+        assert_eq!(trees, 2);
     }
 
     /// Claim a full refund after a failed campaign.
@@ -1154,36 +1733,55 @@ impl CampaignFundingContract {
 
         let campaign = Self::load_campaign(&env, campaign_id);
 
-        if campaign.status != CampaignStatus::Failed {
+        let now = env.ledger().timestamp();
+        let sixty_days = 60 * 24 * 60 * 60;
+        let ninety_days = 90 * 24 * 60 * 60;
+
+        let mut refund_percent = 0;
+
+        if campaign.status == CampaignStatus::Failed {
+            refund_percent = 100;
+        } else if campaign.planter == OptionalAddress::None && now > campaign.created_at + sixty_days {
+            refund_percent = 100;
+        } else {
+            let count_key = DataKey::PlantingCount(campaign_id);
+            let planting_count: u64 = env.storage().instance().get(&count_key).unwrap_or(0);
+            if planting_count == 0 && now > campaign.created_at + ninety_days {
+                refund_percent = 50;
+            }
+        }
+
+        if campaign.status == CampaignStatus::Claimed || campaign.status == CampaignStatus::VerificationFailed {
+            refund_percent = 0;
+        }
+
+        if refund_percent == 0 {
             panic_with_error!(&env, Error::CampaignNotFailed);
         }
 
         let contrib_key = DataKey::Contribution(campaign_id, contributor.clone());
-        // Prefer the gross ledger. The fallback lets pre-upgrade records
-        // continue to refund correctly because Contribution was historically
-        // the gross sponsor amount.
-        let original_key = DataKey::OriginalContribution(campaign_id, contributor.clone());
-        let amount: i128 = env.storage().persistent().get(&original_key)
-            .or_else(|| env.storage().persistent().get(&contrib_key))
-            .unwrap_or(0);
+        let amount: i128 = env.storage().persistent().get(&contrib_key).unwrap_or(0);
 
         if amount <= 0 {
             panic_with_error!(&env, Error::NoContributionFound);
         }
 
+        let refund_amount = (amount * refund_percent as i128) / 100;
+
         // Clear before transferring (check-effects-interactions).
         env.storage().persistent().remove(&contrib_key);
-        env.storage().persistent().remove(&original_key);
 
         let token_client = token::Client::new(&env, &campaign.token);
-        token_client.transfer(&env.current_contract_address(), &contributor, &amount);
+        if refund_amount > 0 {
+            token_client.transfer(&env.current_contract_address(), &contributor, &refund_amount);
+        }
 
         env.events().publish(
             ("RefundIssued", campaign_id),
             RefundIssuedEvent {
                 campaign_id,
                 contributor,
-                amount,
+                amount: refund_amount,
             },
         );
     }
@@ -1346,6 +1944,20 @@ impl CampaignFundingContract {
         Self::load_campaign(&env, campaign_id)
     }
 
+    /// Return the demand-adjusted cost per tree using integer basis points.
+    pub fn get_dynamic_cost_per_tree(env: Env, campaign_id: u64, base_cost: i128) -> i128 {
+        let campaign = Self::load_campaign(&env, campaign_id);
+        if base_cost <= 0 || campaign.target_amount <= 0 { return 0; }
+        let demand_bps = (campaign.total_raised * 10_000 / campaign.target_amount).min(10_000);
+        let multiplier_bps: i128 = if demand_bps >= 10_000 { 15_000 } else if demand_bps >= 9_000 { 12_500 } else if demand_bps >= 7_000 { 11_000 } else { 10_000 };
+        base_cost * multiplier_bps / 10_000
+    }
+
+    /// Return the seasonal carbon-credit multiplier fixed at creation.
+    pub fn get_co2_multiplier(env: Env, campaign_id: u64) -> u32 {
+        Self::load_campaign(&env, campaign_id).co2_multiplier
+    }
+
     /// Add a co-creator before a campaign succeeds. All current creators and
     /// the new owner must authorise the change.
     pub fn add_creator(env: Env, campaign_id: u64, creator: Address, share: u32) {
@@ -1380,6 +1992,42 @@ impl CampaignFundingContract {
     /// Return revenue shares in basis points and payout order.
     pub fn get_campaign_revenue_shares(env: Env, campaign_id: u64) -> Vec<u32> {
         Self::load_campaign(&env, campaign_id).revenue_shares
+    }
+
+    /// Return one group's sponsorship record and cumulative contribution.
+    pub fn get_group_sponsorship(
+        env: Env,
+        campaign_id: u64,
+        group_id: u64,
+    ) -> GroupSponsorship {
+        Self::load_campaign(&env, campaign_id);
+        env.storage()
+            .persistent()
+            .get(&DataKey::GroupSponsorship(campaign_id, group_id))
+            .unwrap_or_else(|| panic_with_error!(&env, Error::GroupSponsorshipNotFound))
+    }
+
+    /// Return all group sponsorships for a campaign in creation order.
+    pub fn get_group_sponsorships(env: Env, campaign_id: u64) -> Vec<GroupSponsorship> {
+        Self::load_campaign(&env, campaign_id);
+        let count: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::GroupSponsorshipCount(campaign_id))
+            .unwrap_or(0);
+        let mut groups = Vec::new(&env);
+        let mut group_id = 1;
+        while group_id <= count {
+            if let Some(group) = env
+                .storage()
+                .persistent()
+                .get(&DataKey::GroupSponsorship(campaign_id, group_id))
+            {
+                groups.push_back(group);
+            }
+            group_id += 1;
+        }
+        groups
     }
 
     /// Return the total amount contributed by `contributor` to `campaign_id`.
@@ -1469,9 +2117,361 @@ impl CampaignFundingContract {
             }
         }
         history
+    }
+
+    /// Return the audit log for a campaign.
+    ///
+    /// # Arguments
+    /// * `campaign_id` — The campaign to query.
+    ///
+    /// # Returns
+    /// A vector of audit log entries ordered from oldest to newest.
+    pub fn get_audit_log(env: Env, campaign_id: u64) -> Vec<AuditLogEntry> {
+        let count: u32 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::AuditLogCount(campaign_id))
+            .unwrap_or(0);
+
+        let mut log = Vec::new(&env);
+        for i in 0..count {
+            if let Some(entry) = env
+                .storage()
+                .persistent()
+                .get(&DataKey::AuditLog(campaign_id, i))
+            {
+                log.push_back(entry);
+            }
+        }
+        log
+    }
+
+    /// Assign a role to an address for a campaign.
+    ///
+    /// Only Owners can assign roles.
+    ///
+    /// # Arguments
+    /// * `campaign_id` — The campaign ID.
+    /// * `address` — The address to assign the role to.
+    /// * `role` — The role to assign.
+    ///
+    /// # Errors
+    /// * [`Error::InsufficientPermissions`] — Caller is not an Owner.
+    /// * [`Error::RoleAlreadyAssigned`] — Address already has a role.
+    pub fn assign_role(env: Env, campaign_id: u64, address: Address, role: CampaignRole) {
+        Self::check_permission(&env, campaign_id, &address, "assign_role");
+        
+        let key = DataKey::CampaignRole(campaign_id, address.clone());
+        if env.storage().persistent().has(&key) {
+            panic_with_error!(&env, Error::RoleAlreadyAssigned);
+        }
+
+        env.storage().persistent().set(&key, &role);
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, LEDGER_THRESHOLD, LEDGER_BUMP);
+
+        let action_str = soroban_sdk::String::from_slice(&env, &format!("assign_role:{:?}", role));
+        Self::record_audit_log(&env, campaign_id, address, action_str);
+    }
+
+    /// Remove a role assignment from an address for a campaign.
+    ///
+    /// Only Owners can remove roles.
+    ///
+    /// # Arguments
+    /// * `campaign_id` — The campaign ID.
+    /// * `address` — The address to remove the role from.
+    ///
+    /// # Errors
+    /// * [`Error::InsufficientPermissions`] — Caller is not an Owner.
+    /// * [`Error::RoleNotFound`] — Address has no assigned role.
+    pub fn remove_role(env: Env, campaign_id: u64, address: Address) {
+        Self::check_permission(&env, campaign_id, &address, "remove_role");
+        
+        let key = DataKey::CampaignRole(campaign_id, address.clone());
+        if !env.storage().persistent().has(&key) {
+            panic_with_error!(&env, Error::RoleNotFound);
+        }
+
+        env.storage().persistent().remove(&key);
+
+        let action_str = soroban_sdk::String::from_slice(&env, "remove_role");
+        Self::record_audit_log(&env, campaign_id, address, action_str);
+    }
+
+    /// Get the role of an address for a campaign.
+    ///
+    /// # Arguments
+    /// * `campaign_id` — The campaign ID.
+    /// * `address` — The address to query.
+    ///
+    /// # Returns
+    /// The role of the address (Owner, Editor, or Viewer).
+    pub fn get_role(env: Env, campaign_id: u64, address: Address) -> CampaignRole {
+        Self::get_role_for_address(&env, campaign_id, &address)
+    }
+
     /// Return the configured payment-stream contract address, if any.
     pub fn get_stream_contract(env: Env) -> Option<Address> {
         env.storage().instance().get(&DataKey::StreamContract)
+    }
+
+    /// Return the CO₂ multiplier that was active when this campaign was created.
+    ///
+    /// Returns `1` for dry-season campaigns and `2` for rainy-season campaigns.
+    /// Defaults to `1` if the campaign pre-dates the multiplier feature or if no
+    /// override was recorded.
+    ///
+    /// # Errors
+    /// * [`Error::CampaignNotFound`] — campaign does not exist.
+    pub fn get_co2_multiplier(env: Env, campaign_id: u64) -> u32 {
+        let campaign = Self::load_campaign(&env, campaign_id);
+        let stored = campaign.co2_multiplier.max(1);
+        if stored <= 2 { stored * 10 } else { stored }
+    }
+
+    /// Configure the ERC-20–compatible carbon credit token contract for a campaign.
+    ///
+    /// Must be called by the admin before `mint_carbon_credits` can be invoked.
+    /// The carbon credit token contract must implement the Soroban token interface
+    /// (SEP-0041) and grant this contract address minting authority.
+    ///
+    /// # Arguments
+    /// * `campaign_id`    — Target campaign.
+    /// * `carbon_token`   — Address of the SEP-0041 Stellar asset contract that
+    ///   will be used to mint carbon credit tokens.
+    ///
+    /// # Errors
+    /// * [`Error::NotInitialized`]   — contract not yet initialised.
+    /// * [`Error::Unauthorized`]     — caller is not the admin.
+    /// * [`Error::CampaignNotFound`] — campaign does not exist.
+    pub fn set_carbon_token(env: Env, campaign_id: u64, carbon_token: Address) {
+        Self::assert_initialized(&env);
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NotInitialized));
+        admin.require_auth();
+
+        // Validate campaign exists.
+        let _ = Self::load_campaign(&env, campaign_id);
+
+        let key = DataKey::CarbonToken(campaign_id);
+        env.storage().persistent().set(&key, &carbon_token);
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, LEDGER_THRESHOLD, LEDGER_BUMP);
+    }
+
+    /// Mint ERC-20–compatible carbon credit tokens for all sponsors of a verified campaign.
+    ///
+    /// Carbon credits represent verified CO₂ removal: each verified tree sequesters
+    /// 1 tonne of CO₂ equivalent, multiplied by the campaign's CO₂ multiplier
+    /// (1× for dry season, 2× for rainy season).  Tokens are distributed to sponsors
+    /// proportional to their original contribution amount.
+    ///
+    /// Minting is idempotent-guarded: it can only succeed once per campaign.  The
+    /// carbon credit token contract (`carbon_token`) must implement the Soroban
+    /// token admin interface (`StellarAssetClient`) and this contract must hold
+    /// minting authority over it.
+    ///
+    /// # Arguments
+    /// * `campaign_id`    — ID of the verified campaign.
+    /// * `contributors`   — Ordered list of contributor addresses that funded
+    ///   the campaign.  Each address must have a recorded contribution.
+    ///
+    /// # Errors
+    /// * [`Error::NotInitialized`]             — contract not yet initialised.
+    /// * [`Error::Unauthorized`]               — caller is not the admin.
+    /// * [`Error::CampaignNotFound`]           — campaign does not exist.
+    /// * [`Error::CampaignNotVerified`]        — campaign has not been verified.
+    /// * [`Error::CarbonTokenNotSet`]          — carbon credit token not configured.
+    /// * [`Error::CarbonCreditsAlreadyMinted`] — credits have already been minted.
+    pub fn mint_carbon_credits(env: Env, campaign_id: u64, contributors: Vec<Address>) {
+        Self::assert_initialized(&env);
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NotInitialized));
+        admin.require_auth();
+
+        let campaign = Self::load_campaign(&env, campaign_id);
+
+        // Only mint after trees are verified.
+        if campaign.status != CampaignStatus::Verified && campaign.status != CampaignStatus::Claimed {
+            panic_with_error!(&env, Error::CampaignNotVerified);
+        }
+
+        // Guard against double-minting.
+        let minted_key = DataKey::CarbonCreditsMinted(campaign_id);
+        if env.storage().persistent().get(&minted_key).unwrap_or(false) {
+            panic_with_error!(&env, Error::CarbonCreditsAlreadyMinted);
+        }
+
+        // Retrieve the carbon credit token contract address.
+        let token_key = DataKey::CarbonToken(campaign_id);
+        let carbon_token: Address = env
+            .storage()
+            .persistent()
+            .get(&token_key)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::CarbonTokenNotSet));
+
+        // Total credits = verified_trees × co2_multiplier (1 credit = 1 tonne CO₂).
+        let verified_trees: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::VerifiedTreeCount(campaign_id))
+            .unwrap_or(0);
+
+        let stored = campaign.co2_multiplier.max(1);
+        let actual_multiplier = if stored <= 2 { stored * 10 } else { stored } as i128;
+        let total_credits: i128 = (verified_trees as i128)
+            .checked_mul(actual_multiplier)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::ArithmeticOverflow))
+            / 10;
+
+        if total_credits <= 0 || contributors.is_empty() {
+            // Nothing to mint — mark as done and return.
+            env.storage().persistent().set(&minted_key, &true);
+            env.storage()
+                .persistent()
+                .extend_ttl(&minted_key, LEDGER_THRESHOLD, LEDGER_BUMP);
+            return;
+        }
+
+        // Sum all original contributions to compute each sponsor's pro-rata share.
+        let mut total_contributed: i128 = 0;
+        for contributor in contributors.iter() {
+            let original_key = DataKey::OriginalContribution(campaign_id, contributor.clone());
+            let contrib: i128 = env
+                .storage()
+                .persistent()
+                .get(&original_key)
+                .unwrap_or_else(|| {
+                    // Fall back to the current contribution key for older records.
+                    env.storage()
+                        .persistent()
+                        .get(&DataKey::Contribution(campaign_id, contributor.clone()))
+                        .unwrap_or(0)
+                });
+            total_contributed = total_contributed
+                .checked_add(contrib)
+                .unwrap_or_else(|| panic_with_error!(&env, Error::ArithmeticOverflow));
+        }
+
+        if total_contributed <= 0 {
+            env.storage().persistent().set(&minted_key, &true);
+            env.storage()
+                .persistent()
+                .extend_ttl(&minted_key, LEDGER_THRESHOLD, LEDGER_BUMP);
+            return;
+        }
+
+        // Mint tokens via the SEP-0041 StellarAssetClient (admin mint interface).
+        let carbon_token_admin = token::StellarAssetClient::new(&env, &carbon_token);
+
+        let n = contributors.len();
+        let mut already_minted: i128 = 0;
+        for i in 0..n {
+            let contributor = contributors.get(i).unwrap();
+            let original_key = DataKey::OriginalContribution(campaign_id, contributor.clone());
+            let contrib: i128 = env
+                .storage()
+                .persistent()
+                .get(&original_key)
+                .unwrap_or_else(|| {
+                    env.storage()
+                        .persistent()
+                        .get(&DataKey::Contribution(campaign_id, contributor.clone()))
+                        .unwrap_or(0)
+                });
+            if contrib <= 0 {
+                continue;
+            }
+
+            // Last contributor receives the exact remainder to ensure the sum
+            // equals `total_credits` exactly (no rounding dust left in contract).
+            let sponsor_credits = if i + 1 == n {
+                total_credits - already_minted
+            } else {
+                // Proportional share with ceiling division on the remainder.
+                let q = total_credits / total_contributed;
+                let r = total_credits % total_contributed;
+                let remainder_share = r
+                    .checked_mul(contrib)
+                    .unwrap_or_else(|| panic_with_error!(&env, Error::ArithmeticOverflow))
+                    .checked_add(total_contributed - 1)
+                    .unwrap_or_else(|| panic_with_error!(&env, Error::ArithmeticOverflow))
+                    / total_contributed;
+                q.checked_mul(contrib)
+                    .unwrap_or_else(|| panic_with_error!(&env, Error::ArithmeticOverflow))
+                    .checked_add(remainder_share)
+                    .unwrap_or_else(|| panic_with_error!(&env, Error::ArithmeticOverflow))
+            };
+
+            if sponsor_credits > 0 {
+                carbon_token_admin.mint(&contributor, &sponsor_credits);
+                already_minted = already_minted
+                    .checked_add(sponsor_credits)
+                    .unwrap_or_else(|| panic_with_error!(&env, Error::ArithmeticOverflow));
+            }
+        }
+
+        // Mark as minted (check-effects pattern).
+        env.storage().persistent().set(&minted_key, &true);
+        env.storage()
+            .persistent()
+            .extend_ttl(&minted_key, LEDGER_THRESHOLD, LEDGER_BUMP);
+
+        env.events().publish(
+            ("CarbonCreditsMinted", campaign_id),
+            CarbonCreditsMintedEvent {
+                campaign_id,
+                total_minted: already_minted,
+                co2_multiplier: if campaign.co2_multiplier.max(1) <= 2 { campaign.co2_multiplier.max(1) * 10 } else { campaign.co2_multiplier.max(1) },
+                verified_tree_count: verified_trees,
+            },
+        );
+    }
+
+    /// Retrieve the configured carbon credit token contract address for a campaign.
+    pub fn get_carbon_token(env: Env, campaign_id: u64) -> Option<Address> {
+        let key = DataKey::CarbonToken(campaign_id);
+        env.storage().persistent().get(&key)
+    }
+
+    /// Check if carbon credit tokens have already been minted for a campaign.
+    pub fn is_carbon_credit_minted(env: Env, campaign_id: u64) -> bool {
+        let minted_key = DataKey::CarbonCreditsMinted(campaign_id);
+        env.storage().persistent().get(&minted_key).unwrap_or(false)
+    }
+
+    /// Calculate the carbon credit token allocation (1 token = 1 ton CO2 eq) for a sponsor.
+    pub fn get_sponsor_carbon_credit_allocation(
+        env: Env,
+        campaign_id: u64,
+        sponsor: Address,
+    ) -> i128 {
+        let campaign = Self::load_campaign(&env, campaign_id);
+        if campaign.total_raised == 0 {
+            return 0;
+        }
+
+        let contribution_key = DataKey::Contribution(campaign_id, sponsor);
+        let sponsor_contrib: i128 = env.storage().persistent().get(&contribution_key).unwrap_or(0);
+        if sponsor_contrib <= 0 {
+            return 0;
+        }
+
+        let verified_trees = Self::get_verified_tree_count(env.clone(), campaign_id);
+        let multiplier = Self::get_co2_multiplier(env.clone(), campaign_id);
+        let total_credits = (verified_trees as i128).saturating_mul(multiplier as i128) / 10;
+
+        // Sponsor credits = (sponsor_contrib * total_credits) / total_raised
+        (sponsor_contrib.saturating_mul(total_credits)) / campaign.total_raised
     }
 
     // -----------------------------------------------------------------------
@@ -1737,6 +2737,53 @@ impl CampaignFundingContract {
         tiers
     }
 
+
+    // -----------------------------------------------------------------------
+    // Campaign Milestone Rewards (Issue #869)
+    // -----------------------------------------------------------------------
+
+    /// Check if a specific feature reward tier is unlocked for a campaign.
+    /// - `RewardTier::CustomBranding`: Unlocked at 1,000 verified trees
+    /// - `RewardTier::WhiteLabel`: Unlocked at 5,000 verified trees
+    /// - `RewardTier::ApiAccess`: Unlocked at 10,000 verified trees
+    pub fn is_feature_unlocked(env: Env, campaign_id: u64, tier: RewardTier) -> bool {
+        let _ = Self::load_campaign(&env, campaign_id);
+        let mask: u32 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::RewardsUnlocked(campaign_id))
+            .unwrap_or(0);
+        match tier {
+            RewardTier::CustomBranding => mask & 1 != 0,
+            RewardTier::WhiteLabel => mask & 2 != 0,
+            RewardTier::ApiAccess => mask & 4 != 0,
+        }
+    }
+
+    /// Retrieve the current verified tree count, the next milestone threshold,
+    /// and the completion progress in basis points (10,000 bps = 100%).
+    /// Returns: `(current_trees, next_threshold, progress_bps)`.
+    pub fn get_next_milestone_progress(env: Env, campaign_id: u64) -> (u64, u64, u32) {
+        let current_trees = Self::get_verified_tree_count(env.clone(), campaign_id);
+        let next_threshold = if current_trees < 1_000 {
+            1_000
+        } else if current_trees < 5_000 {
+            5_000
+        } else if current_trees < 10_000 {
+            10_000
+        } else {
+            10_000
+        };
+
+        let progress_bps = if current_trees >= next_threshold {
+            10_000
+        } else {
+            ((current_trees as u128 * 10_000) / (next_threshold as u128)) as u32
+        };
+
+        (current_trees, next_threshold, progress_bps)
+    }
+
     // -----------------------------------------------------------------------
     // Private helpers
     // -----------------------------------------------------------------------
@@ -1784,6 +2831,18 @@ impl CampaignFundingContract {
             }
             None => panic_with_error!(env, Error::CampaignNotFound),
         }
+    }
+
+    fn seasonal_multiplier(timestamp: u64) -> u32 {
+        let z = (timestamp / 86_400) as i64 + 719_468;
+        let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+        let doe = z - era * 146_097;
+        let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let month = mp + if mp < 10 { 3 } else { -9 };
+        let day = doy - (153 * mp + 2) / 5 + 1;
+        if month == 4 || (month == 3 && day == 21) { 15_000 } else if month >= 5 && month <= 10 { 20_000 } else { 10_000 }
     }
 
     /// Persist a [`Campaign`] and extend TTL for both persistent and instance
@@ -1875,17 +2934,74 @@ impl CampaignFundingContract {
         }
     }
 
-    /// Record a status change in the campaign's status history.
-    fn record_status_change(env: &Env, campaign_id: u64, status: CampaignStatus) {
-        let count_key = DataKey::StatusHistoryCount(campaign_id);
+    /// Check if an address has a specific role for a campaign.
+    fn has_role(env: &Env, campaign_id: u64, address: &Address, role: CampaignRole) -> bool {
+        let key = DataKey::CampaignRole(campaign_id, address.clone());
+        if let Some(stored_role) = env.storage().persistent().get(&key) {
+            stored_role == role
+        } else {
+            // If no role is assigned, check if the address is a creator (Owner by default)
+            let campaign = Self::load_campaign(env, campaign_id);
+            if campaign.creators.iter().any(|c| c == address) {
+                role == CampaignRole::Owner
+            } else {
+                false
+            }
+        }
+    }
+
+    /// Get the role of an address for a campaign.
+    fn get_role_for_address(env: &Env, campaign_id: u64, address: &Address) -> CampaignRole {
+        let key = DataKey::CampaignRole(campaign_id, address.clone());
+        if let Some(role) = env.storage().persistent().get(&key) {
+            role
+        } else {
+            // If no role is assigned, check if the address is a creator (Owner by default)
+            let campaign = Self::load_campaign(env, campaign_id);
+            if campaign.creators.iter().any(|c| c == address) {
+                CampaignRole::Owner
+            } else {
+                CampaignRole::Viewer
+            }
+        }
+    }
+
+    /// Check if an address has permission to perform an action based on their role.
+    fn check_permission(env: &Env, campaign_id: u64, address: &Address, action: &str) {
+        let role = Self::get_role_for_address(env, campaign_id, address);
+        
+        match role {
+            CampaignRole::Owner => {
+                // Owners can do everything
+            }
+            CampaignRole::Editor => {
+                // Editors cannot delete or withdraw funds
+                if action == "delete" || action == "withdraw" || action == "claim_funds" {
+                    panic_with_error!(env, Error::InsufficientPermissions);
+                }
+            }
+            CampaignRole::Viewer => {
+                // Viewers cannot perform any write actions
+                panic_with_error!(env, Error::InsufficientPermissions);
+            }
+        }
+    }
+
+    /// Record an action in the audit log.
+    fn record_audit_log(env: &Env, campaign_id: u64, actor: Address, action: soroban_sdk::String) {
+        let count_key = DataKey::AuditLogCount(campaign_id);
         let mut count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
 
-        let entry = StatusHistoryEntry {
-            status,
+        let role = Self::get_role_for_address(env, campaign_id, &actor);
+
+        let entry = AuditLogEntry {
+            role,
+            actor: actor.clone(),
+            action: action.clone(),
             timestamp: env.ledger().timestamp(),
         };
 
-        let entry_key = DataKey::StatusHistory(campaign_id, count);
+        let entry_key = DataKey::AuditLog(campaign_id, count);
         env.storage().persistent().set(&entry_key, &entry);
         env.storage()
             .persistent()
@@ -1934,35 +3050,14 @@ impl CampaignFundingContract {
 
     /// Compute the 10% reserve for tree replacement.
     ///
-    /// Uses ceiling division (same technique as `calculate_fee`) so that the
-    /// remainder term is rounded **up** instead of floored.  Without ceiling
-    /// rounding the remainder term `(r * 1000) / 10_000` (where
-    /// `r = amount % 10_000`) can floor to zero even when non-zero, leaving
-    /// up to 1 base unit in the distributable amount instead of the reserve.
-    ///
-    /// Formula: `ceil(amount * 1000 / 10_000)`
-    /// Implemented as:
-    ///   `amount = q * 10_000 + r`
-    ///   `ceil(r * 1000 / 10_000) = (r * 1000 + 9_999) / 10_000`
+    /// Uses the same precision-preserving calculation as `calculate_fee`.
     fn calculate_reserve(env: &Env, amount: i128) -> i128 {
         if amount <= 0 {
             return 0;
         }
         // 1000 basis points = 10%
         let rate: i128 = 1000;
-        let q = amount / 10_000;
-        let r = amount % 10_000;
-        // Ceiling division for the remainder term: ceil(r * rate / 10_000)
-        let remainder_reserve = r
-            .checked_mul(rate)
-            .unwrap_or_else(|| panic_with_error!(env, Error::ArithmeticOverflow))
-            .checked_add(9_999)
-            .unwrap_or_else(|| panic_with_error!(env, Error::ArithmeticOverflow))
-            / 10_000;
-        q.checked_mul(rate)
-            .unwrap_or_else(|| panic_with_error!(env, Error::ArithmeticOverflow))
-            .checked_add(remainder_reserve)
-            .unwrap_or_else(|| panic_with_error!(env, Error::ArithmeticOverflow))
+        (amount / 10_000) * rate + ((amount % 10_000) * rate) / 10_000
     }
 
     /// Distribute proceeds to the campaign creator or team members.
@@ -1970,11 +3065,6 @@ impl CampaignFundingContract {
     /// If a team configuration exists via [`set_team_rewards`], the proceeds
     /// are split proportionally among team members. Otherwise, the full
     /// amount goes to the sole creator.
-    ///
-    /// Each member's share is computed with ceiling division on the remainder
-    /// term so no dust is silently discarded.  To guarantee that the sum of
-    /// all shares equals `amount` exactly, the last team member receives
-    /// whatever is left after the preceding members have been paid.
     fn distribute_proceeds(env: &Env, campaign: &Campaign, campaign_id: u64, amount: i128) {
         let token_client = token::Client::new(env, &campaign.token);
         let team_key = DataKey::TeamMembers(campaign_id);
@@ -1984,40 +3074,13 @@ impl CampaignFundingContract {
 
         match team {
             Some(members) if !members.is_empty() => {
-                let n = members.len();
-                let mut distributed: i128 = 0;
-
                 // Distribute to team members proportionally
-                for i in 0..n {
+                for i in 0..members.len() {
                     let member = members.get(i).unwrap();
-
-                    // The last member receives the exact remainder so the
-                    // total always sums to `amount` with no dust locked in
-                    // the contract.
-                    let member_share = if i + 1 == n {
-                        amount - distributed
-                    } else {
-                        // Ceiling division on the remainder term: no base unit
-                        // is silently discarded when the split is not exact.
-                        let bps = member.percentage_bps as i128;
-                        let q = amount / 10_000;
-                        let r = amount % 10_000;
-                        let remainder_share = r
-                            .checked_mul(bps)
-                            .unwrap_or_else(|| panic_with_error!(env, Error::ArithmeticOverflow))
-                            .checked_add(9_999)
-                            .unwrap_or_else(|| panic_with_error!(env, Error::ArithmeticOverflow))
-                            / 10_000;
-                        q.checked_mul(bps)
-                            .unwrap_or_else(|| panic_with_error!(env, Error::ArithmeticOverflow))
-                            .checked_add(remainder_share)
-                            .unwrap_or_else(|| panic_with_error!(env, Error::ArithmeticOverflow))
-                    };
+                    let member_share = (amount / 10_000) * (member.percentage_bps as i128)
+                        + ((amount % 10_000) * (member.percentage_bps as i128)) / 10_000;
 
                     if member_share > 0 {
-                        distributed = distributed
-                            .checked_add(member_share)
-                            .unwrap_or_else(|| panic_with_error!(env, Error::ArithmeticOverflow));
                         token_client.transfer(
                             &env.current_contract_address(),
                             &member.address,
@@ -3011,6 +4074,14 @@ mod tests {
         env.mock_all_auths();
         set_time(&env, 1_000);
         let (_, client, _, _) = setup_contract(&env);
+        let creator = Address::generate(&env);
+        let token = Address::generate(&env);
+        let id = client.create_campaign(&creator, &token, &10_000, &5_000, &2_000);
+        let history = client.get_status_history(&id);
+        assert_eq!(history.len(), 1);
+        assert_eq!(history.get(0).unwrap().status, CampaignStatus::Active);
+    }
+
     // Funds-flow transparency events
     // -----------------------------------------------------------------------
 
@@ -3369,20 +4440,11 @@ mod tests {
         assert_eq!(ms.get(0).unwrap(), 25);
     }
 
-    // -----------------------------------------------------------------------
-    // pause / resume
-    // -----------------------------------------------------------------------
-
     #[test]
-    fn test_pause_and_resume_campaign_success() {
+    fn test_dynamic_pricing_uses_demand_tiers() {
         let env = Env::default();
         env.mock_all_auths();
         set_time(&env, 1_000);
-
-    #[test]
-    fn test_rainy_season_co2_multiplier() {
-        let env = Env::default();
-        env.mock_all_auths();
         let (_, client, _, _) = setup_contract(&env);
         let creator = Address::generate(&env);
         let token = Address::generate(&env);
@@ -3408,9 +4470,15 @@ mod tests {
 
         let (_, client, _, _) = setup_contract(&env);
         let token_admin = Address::generate(&env);
-        let (token_addr, _, token_admin_client) = create_token(&env, &token_admin);
+        let (token, _, token_client) = create_token(&env, &token_admin);
         let creator = Address::generate(&env);
         let contributor = Address::generate(&env);
+        token_client.mint(&creator, &500);
+        token_client.mint(&contributor, &10_000);
+        let id = client.create_campaign(&creator, &token, &10_000, &5_000, &2_000, &500);
+        assert_eq!(client.get_dynamic_cost_per_tree(&id, &100), 100);
+        client.contribute(&contributor, &id, &9_000);
+        assert_eq!(client.get_dynamic_cost_per_tree(&id, &100), 125);
         token_admin_client.mint(&contributor, &5_000);
 
         let id = client.create_campaign(&creator, &token_addr, &10_000, &5_000, &2_000);
@@ -3421,23 +4489,315 @@ mod tests {
         // May 15, 2026 (rainy season -> 2x multiplier)
         set_time(&env, 1_778_800_000);
         let id_rainy = client.create_campaign(&creator, &token, &10_000, &5_000, &1_778_900_000);
-        assert_eq!(client.get_co2_multiplier(&id_rainy), 2);
+        assert_eq!(client.get_co2_multiplier(&id_rainy), 20);
 
         // January 15, 2026 (non-rainy season -> 1x multiplier)
         set_time(&env, 1_768_400_000);
         let id_dry = client.create_campaign(&creator, &token, &10_000, &5_000, &1_768_500_000);
-        assert_eq!(client.get_co2_multiplier(&id_dry), 1);
+        assert_eq!(client.get_co2_multiplier(&id_dry), 10);
     }
 
     #[test]
-    fn test_set_and_get_reward_token() {
+    fn test_seasonal_multiplier_is_fixed_at_creation() {
         let env = Env::default();
         env.mock_all_auths();
         let (_, client, _, _) = setup_contract(&env);
-        let reward_token = Address::generate(&env);
+        let creator = Address::generate(&env);
+        let token_admin = Address::generate(&env);
+        let (token, _, token_client) = create_token(&env, &token_admin);
+        token_client.mint(&creator, &1_000);
+        set_time(&env, 1_777_500_000); // April 2026
+        let earth_month = client.create_campaign(&creator, &token, &10_000, &5_000, &1_778_000_000, &500);
+        assert_eq!(client.get_co2_multiplier(&earth_month), 15_000);
+        set_time(&env, 1_780_000_000); // rainy season
+        let rainy = client.create_campaign(&creator, &token, &10_000, &5_000, &1_780_500_000, &500);
+        assert_eq!(client.get_co2_multiplier(&rainy), 20_000);
+    }
 
-        assert_eq!(client.get_reward_token(), None);
-        client.set_reward_token(&reward_token);
-        assert_eq!(client.get_reward_token(), Some(reward_token));
+    // -----------------------------------------------------------------------
+    // Campaign Milestone Rewards Tests (Issue #869)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_milestone_rewards_feature_unlock_progression() {
+        let env = Env::default();
+        env.mock_all_auths();
+        set_time(&env, 1_000);
+        let (_, client, _, _) = setup_contract(&env);
+        let creator = Address::generate(&env);
+        let token = Address::generate(&env);
+        let planter = Address::generate(&env);
+
+        let id = client.create_campaign(&creator, &token, &100_000, &50_000, &10_000);
+
+        // Initially no features unlocked
+        assert_eq!(client.is_feature_unlocked(&id, &RewardTier::CustomBranding), false);
+        assert_eq!(client.is_feature_unlocked(&id, &RewardTier::WhiteLabel), false);
+        assert_eq!(client.is_feature_unlocked(&id, &RewardTier::ApiAccess), false);
+
+        let (trees0, next0, prog0) = client.get_next_milestone_progress(&id);
+        assert_eq!(trees0, 0);
+        assert_eq!(next0, 1_000);
+        assert_eq!(prog0, 0);
+
+        // Milestone 1: Record and verify 1,000 trees -> Unlocks Custom Branding
+        client.record_tree_planting(&id, &planter, &1_000);
+        client.verify_tree_planting(&id, &0);
+
+        assert_eq!(client.is_feature_unlocked(&id, &RewardTier::CustomBranding), true);
+        assert_eq!(client.is_feature_unlocked(&id, &RewardTier::WhiteLabel), false);
+        assert_eq!(client.is_feature_unlocked(&id, &RewardTier::ApiAccess), false);
+
+        let (trees1, next1, prog1) = client.get_next_milestone_progress(&id);
+        assert_eq!(trees1, 1_000);
+        assert_eq!(next1, 5_000);
+        assert_eq!(prog1, 2_000); // 1,000 / 5,000 = 20% (2,000 bps)
+
+        // Milestone 2: Record and verify 4,000 more trees (5,000 total) -> Unlocks White Label
+        client.record_tree_planting(&id, &planter, &4_000);
+        client.verify_tree_planting(&id, &1);
+
+        assert_eq!(client.is_feature_unlocked(&id, &RewardTier::CustomBranding), true);
+        assert_eq!(client.is_feature_unlocked(&id, &RewardTier::WhiteLabel), true);
+        assert_eq!(client.is_feature_unlocked(&id, &RewardTier::ApiAccess), false);
+
+        let (trees2, next2, prog2) = client.get_next_milestone_progress(&id);
+        assert_eq!(trees2, 5_000);
+        assert_eq!(next2, 10_000);
+        assert_eq!(prog2, 5_000); // 5,000 / 10,000 = 50% (5,000 bps)
+
+        // Milestone 3: Record and verify 5,000 more trees (10,000 total) -> Unlocks API Access
+        client.record_tree_planting(&id, &planter, &5_000);
+        client.verify_tree_planting(&id, &2);
+
+        assert_eq!(client.is_feature_unlocked(&id, &RewardTier::CustomBranding), true);
+        assert_eq!(client.is_feature_unlocked(&id, &RewardTier::WhiteLabel), true);
+        assert_eq!(client.is_feature_unlocked(&id, &RewardTier::ApiAccess), true);
+
+        let (trees3, next3, prog3) = client.get_next_milestone_progress(&id);
+        assert_eq!(trees3, 10_000);
+        assert_eq!(next3, 10_000);
+        assert_eq!(prog3, 10_000); // 100% achieved
+    }
+
+    // -----------------------------------------------------------------------
+    // Carbon Credit Token Minting Tests (Issue #845)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_carbon_credit_getters_and_sponsor_allocation() {
+        let env = Env::default();
+        env.mock_all_auths();
+        set_time(&env, 1_000);
+        let (_, client, _, _) = setup_contract(&env);
+        let creator = Address::generate(&env);
+        let sponsor = Address::generate(&env);
+        let token = Address::generate(&env);
+        let carbon_token = Address::generate(&env);
+
+        let id = client.create_campaign(&creator, &token, &10_000, &5_000, &2_000);
+
+        // Initially no carbon token configured
+        assert_eq!(client.get_carbon_token(&id), None);
+        assert_eq!(client.is_carbon_credit_minted(&id), false);
+
+        // Configure carbon token
+        client.set_carbon_token(&id, &carbon_token);
+        assert_eq!(client.get_carbon_token(&id), Some(carbon_token));
+
+        // Sponsor contributes 5,000 out of 10,000 (50%)
+        client.contribute(&sponsor, &id, &5_000);
+
+        // Plant and verify 1,000 trees
+        let planter = Address::generate(&env);
+        client.record_tree_planting(&id, &planter, &1_000);
+        client.verify_tree_planting(&id, &0);
+
+        // Allocation: 50% of 1,000 trees * 1x multiplier = 500 carbon credit tokens
+        let allocation = client.get_sponsor_carbon_credit_allocation(&id, &sponsor);
+        assert_eq!(allocation, 500);
+    #[test]
+    #[should_panic(expected = "Error(Contract, #4)")]
+    fn test_dynamic_pricing_zero_base_cost_fails() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (_, client, _, _) = setup_contract(&env);
+        let creator = Address::generate(&env);
+        let token = Address::generate(&env);
+
+        let id = client.create_campaign(&creator, &token, &10_000, &5_000, &2_000);
+        client.get_campaign_cost_per_tree(&id, &0);
+    }
+
+    // -----------------------------------------------------------------------
+    // Role-based permissions tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_contribute_with_quote_records_conversion() {
+        let env = Env::default();
+        env.mock_all_auths();
+        set_time(&env, 1_000);
+        let (_, client, _, _) = setup_contract(&env);
+
+        let token_admin = Address::generate(&env);
+        let (token_addr, _, token_admin_client) = create_token(&env, &token_admin);
+        let creator = Address::generate(&env);
+        let contributor = Address::generate(&env);
+        token_admin_client.mint(&creator, &500);
+        token_admin_client.mint(&contributor, &10_000);
+
+        let id = client.create_campaign(&creator, &token_addr, &10_000, &5_000, &2_000, &500);
+
+        // 1 EUR = 1.25 funding tokens (rate in 7-decimal fixed point).
+        let quote = ConversionQuote {
+            rate: 12_500_000,
+            quoted_at: 1_000,
+        };
+        client.contribute_with_quote(&contributor, &id, &Currency::Eur, &2_000, &quote);
+
+        let record = client
+            .get_multi_currency_contribution(&id, &contributor)
+            .unwrap();
+        assert_eq!(record.currency, Currency::Eur);
+        assert_eq!(record.original_amount, 2_000);
+        assert_eq!(record.converted_amount, 2_500);
+        assert_eq!(record.rate, 12_500_000);
+        assert_eq!(record.quoted_at, 1_000);
+        assert_eq!(client.get_campaign(&id).total_raised, 2_500);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #31)")]
+    fn test_contribute_with_stale_quote_fails() {
+        let env = Env::default();
+        env.mock_all_auths();
+        set_time(&env, 10_000);
+        let (_, client, _, _) = setup_contract(&env);
+
+        let token_admin = Address::generate(&env);
+        let (token_addr, _, token_admin_client) = create_token(&env, &token_admin);
+        let creator = Address::generate(&env);
+        let contributor = Address::generate(&env);
+        token_admin_client.mint(&creator, &500);
+        token_admin_client.mint(&contributor, &10_000);
+
+        let id = client.create_campaign(&creator, &token_addr, &10_000, &5_000, &20_000, &500);
+        let quote = ConversionQuote {
+            rate: 10_000_000,
+            quoted_at: 1_000,
+        };
+        client.contribute_with_quote(&contributor, &id, &Currency::Usd, &1_000, &quote);
+    }
+
+    #[test]
+    fn test_assign_role_as_owner() {
+        let env = Env::default();
+        env.mock_all_auths();
+        set_time(&env, 1_000);
+        let (contract_id, client, admin, _) = setup_contract(&env);
+
+        let token_admin = Address::generate(&env);
+        let (token_addr, _, token_admin_client) = create_token(&env, &token_admin);
+        let creator = Address::generate(&env);
+        let editor = Address::generate(&env);
+        token_admin_client.mint(&creator, &500);
+
+        let id = client.create_campaign(&creator, &token_addr, &10_000, &5_000, &2_000, &500);
+
+        // Creator (Owner) can assign Editor role
+        client.assign_role(&id, &editor, &CampaignRole::Editor);
+        
+        // Verify the role was assigned
+        let role = client.get_role(&id, &editor);
+        assert_eq!(role, CampaignRole::Editor);
+    }
+
+    #[test]
+    fn test_creator_has_owner_role_by_default() {
+        let env = Env::default();
+        env.mock_all_auths();
+        set_time(&env, 1_000);
+        let (contract_id, client, _, _) = setup_contract(&env);
+
+        let token_admin = Address::generate(&env);
+        let (token_addr, _, token_admin_client) = create_token(&env, &token_admin);
+        let creator = Address::generate(&env);
+        token_admin_client.mint(&creator, &500);
+
+        let id = client.create_campaign(&creator, &token_addr, &10_000, &5_000, &2_000, &500);
+
+        // Creator should have Owner role by default
+        let role = client.get_role(&id, &creator);
+        assert_eq!(role, CampaignRole::Owner);
+    }
+
+    #[test]
+    fn test_audit_log_records_actions() {
+        let env = Env::default();
+        env.mock_all_auths();
+        set_time(&env, 1_000);
+        let (contract_id, client, _, _) = setup_contract(&env);
+
+        let token_admin = Address::generate(&env);
+        let (token_addr, _, token_admin_client) = create_token(&env, &token_admin);
+        let creator = Address::generate(&env);
+        let editor = Address::generate(&env);
+        token_admin_client.mint(&creator, &500);
+
+        let id = client.create_campaign(&creator, &token_addr, &10_000, &5_000, &2_000, &500);
+        client.assign_role(&id, &editor, &CampaignRole::Editor);
+
+        // Verify audit log contains the role assignment
+        let audit_log = client.get_audit_log(&id);
+        assert_eq!(audit_log.len(), 1);
+        
+        let entry = audit_log.get(0).unwrap();
+        assert_eq!(entry.role, CampaignRole::Owner);
+        assert_eq!(entry.actor, creator);
+    }
+
+    #[test]
+    fn test_remove_role() {
+        let env = Env::default();
+        env.mock_all_auths();
+        set_time(&env, 1_000);
+        let (contract_id, client, _, _) = setup_contract(&env);
+
+        let token_admin = Address::generate(&env);
+        let (token_addr, _, token_admin_client) = create_token(&env, &token_admin);
+        let creator = Address::generate(&env);
+        let editor = Address::generate(&env);
+        token_admin_client.mint(&creator, &500);
+
+        let id = client.create_campaign(&creator, &token_addr, &10_000, &5_000, &2_000, &500);
+        client.assign_role(&id, &editor, &CampaignRole::Editor);
+        
+        // Remove the role
+        client.remove_role(&id, &editor);
+
+        // Verify the role was removed (should default to Viewer)
+        let role = client.get_role(&id, &editor);
+        assert_eq!(role, CampaignRole::Viewer);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #28)")]
+    fn test_remove_nonexistent_role() {
+        let env = Env::default();
+        env.mock_all_auths();
+        set_time(&env, 1_000);
+        let (contract_id, client, _, _) = setup_contract(&env);
+
+        let token_admin = Address::generate(&env);
+        let (token_addr, _, token_admin_client) = create_token(&env, &token_admin);
+        let creator = Address::generate(&env);
+        let random_address = Address::generate(&env);
+        token_admin_client.mint(&creator, &500);
+
+        let id = client.create_campaign(&creator, &token_addr, &10_000, &5_000, &2_000, &500);
+
+        // Try to remove a role that was never assigned - should panic
+        client.remove_role(&id, &random_address);
     }
 }

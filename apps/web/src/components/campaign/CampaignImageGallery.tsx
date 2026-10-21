@@ -49,6 +49,7 @@ export function CampaignImageGallery({ images }: CampaignImageGalleryProps) {
                 loading={isHero ? "eager" : "lazy"}
                 fetchPriority={isHero ? "high" : "auto"}
                 decoding="async"
+                referrerPolicy="no-referrer"
                 unoptimized
               />
             </figure>

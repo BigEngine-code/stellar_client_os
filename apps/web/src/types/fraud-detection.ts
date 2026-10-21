@@ -3,6 +3,10 @@
  */
 
 export type FraudPatternType =
+  | 'UNREALISTIC_TREE_COUNT'
+  | 'SUSPICIOUS_VERIFICATION'
+  | 'BOT_SPONSORS'
+  | 'LOCATION_MISMATCH'
   | 'FAKE_BACKERS'
   | 'DUPLICATE_ACCOUNTS'
   | 'MONEY_LAUNDERING'
@@ -20,7 +24,7 @@ export interface SuspiciousActivityFlag {
   patternType: FraudPatternType;
   description: string;
   severityScore: number; // 0-100
-  evidenceDetails: Record<string, any>;
+  evidenceDetails: Record<string, unknown>;
   detectedAt: string;
 }
 
@@ -42,12 +46,28 @@ export interface BackerProfileSample {
   pledgeAmount: number;
   pledgedAt: string;
   accountAgeDays?: number;
+  userAgent?: string;
+  verificationStatus?: 'verified' | 'pending' | 'failed';
+  location?: string;
+}
+
+export interface VerificationSample {
+  verifiedAt?: string;
+  verifierId?: string;
+  status: 'verified' | 'rejected' | 'pending';
+  treeCount?: number;
+  evidenceId?: string;
 }
 
 export interface AnalyzeCampaignInput {
   campaignId: string;
   campaignTitle?: string;
   creatorAddress?: string;
+  location?: string;
+  treeCount?: number;
+  targetTrees?: number;
+  campaignDurationDays?: number;
+  verifications?: VerificationSample[];
   backers?: BackerProfileSample[];
   transactions?: {
     txHash: string;
@@ -67,4 +87,56 @@ export interface CampaignSecurityStatus {
   status: 'ACTIVE' | 'FLAGGED' | 'SUSPENDED';
   suspendedAt?: string;
   reason?: string;
+}
+
+export type ReviewStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface ManualReviewItem {
+  id: string;
+  campaignId: string;
+  campaignTitle: string;
+  creatorAddress?: string;
+  flaggedAt: string;
+  riskScore: number;
+  riskLevel: RiskLevel;
+  flags: SuspiciousActivityFlag[];
+  status: ReviewStatus;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  reviewNotes?: string;
+  submittedAt: string;
+}
+
+export interface ManualReviewQueueFilter {
+  status?: ReviewStatus;
+  riskLevel?: RiskLevel;
+  minRiskScore?: number;
+}
+
+export interface ReviewCampaignDecisionInput {
+  decision: 'APPROVE' | 'REJECT';
+  reviewedBy: string;
+  notes?: string;
+}
+
+export interface ModelMetrics {
+  totalEvaluations: number;
+  flaggedCount: number;
+  approvedCount: number; // false positives (flagged by model but approved by human reviewer)
+  rejectedCount: number; // true positives (flagged by model and confirmed fraudulent)
+  falsePositiveRate: number; // approvedCount / flaggedCount (or 0 if flaggedCount === 0)
+  lastRetrainedAt: string;
+  nextScheduledRetrainingAt: string;
+  version: string;
+}
+
+export interface RetrainingLog {
+  id: string;
+  retrainedAt: string;
+  triggeredBy: string; // 'QUARTERLY_SCHEDULE' | 'MANUAL'
+  previousVersion: string;
+  newVersion: string;
+  falsePositiveRateBefore: number;
+  trainingSamplesCount: number;
+  notes?: string;
 }

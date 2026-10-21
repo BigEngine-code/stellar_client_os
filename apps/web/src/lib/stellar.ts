@@ -4,28 +4,11 @@
  * or the SDK client wrappers in {@link @/lib/api.ts}.
  */
 import { Keypair, Networks, Horizon } from '@stellar/stellar-sdk'
-import { PaymentStreamFormData, SUPPORTED_TOKENS, StreamRecord } from './validations'
-import { throwIfAborted, withAbortSignal } from '../utils/retry'
-
-function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
-  return withAbortSignal(new Promise((resolve) => setTimeout(resolve, ms)), signal)
-}
+import { StreamRecord } from './validations'
 
 // Use testnet for development
 export const server = new Horizon.Server('https://horizon-testnet.stellar.org')
 export const networkPassphrase = Networks.TESTNET
-
-function throwIfAborted(signal?: AbortSignal) {
-  if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError')
-}
-
-function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) { reject(signal.reason ?? new DOMException('Aborted', 'AbortError')); return }
-    const id = setTimeout(resolve, ms)
-    signal?.addEventListener('abort', () => { clearTimeout(id); reject(signal.reason ?? new DOMException('Aborted', 'AbortError')) }, { once: true })
-  })
-}
 
 export class StellarService {
   static async getAccountInfo(publicKey: string) {
@@ -56,6 +39,27 @@ export class StellarService {
     const formatted = num.toFixed(decimals)
     // Only strip trailing zeros when there is a decimal point
     return formatted.includes('.') ? formatted.replace(/\.?0+$/, '') : formatted
+  }
+
+  /**
+   * @deprecated Use the currency helpers in {@link @/lib/currency.ts} instead.
+   * Maintained for legacy components that still import from this module.
+   *
+   * Formats a dual-amount receipt line showing the original amount, the
+   * converted amount and the conversion rate applied at pledge time.
+   */
+  static formatDualAmountReceipt(
+    originalAmount: string,
+    originalCurrency: string,
+    convertedAmount: string,
+    convertedCurrency: string,
+    rate: number,
+    decimals: number = 2
+  ): string {
+    const original = StellarService.formatTokenAmount(originalAmount, decimals)
+    const converted = StellarService.formatTokenAmount(convertedAmount, decimals)
+    const formattedRate = StellarService.formatTokenAmount(rate.toString(), 6)
+    return `${original} ${originalCurrency} → ${converted} ${convertedCurrency} (rate: 1 ${originalCurrency} = ${formattedRate} ${convertedCurrency})`
   }
 
   static calculateStreamProgress(stream: StreamRecord): {

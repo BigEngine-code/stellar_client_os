@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, use } from "react";
+import React, { useState, use, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -16,26 +16,55 @@ import {
   Globe,
   AlertTriangle,
   Crown,
-  Eye,
   TreePine,
+  Download,
+  Coins,
+  Bell,
+  Camera,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { CampaignARVisualizer } from "@/components/modules/campaign/ar/CampaignARVisualizer";
+import CampaignARViewer from "@/components/modules/campaigns/CampaignARViewer";
 import { CampaignSponsorWall } from "@/components/modules/campaign/sponsor-wall/CampaignSponsorWall";
 import { CampaignCollaboration } from "@/components/modules/campaign/collaboration/CampaignCollaboration";
 import { CampaignMilestones } from "@/components/modules/campaign/CampaignMilestones";
 import { CampaignQAModeration } from "@/components/modules/campaign/qa/CampaignQAModeration";
+import { CampaignLiveQASession } from "@/components/modules/campaign/qa/CampaignLiveQASession";
 import { CampaignSeries } from "@/components/modules/campaign/series/CampaignSeries";
 import { CampaignAnalyticsDashboard } from "@/components/modules/campaign/analytics/CampaignAnalyticsDashboard";
 import { BackerCommunity } from "@/components/modules/campaign/community/BackerCommunity";
+import { CampaignFollowButton } from "@/components/modules/campaign/follow/CampaignFollowButton";
 import { TopBackers } from "@/components/modules/campaign/backers/TopBackers";
+import { BackerExclusiveContent } from "@/components/modules/campaign/exclusive-content/BackerExclusiveContent";
+import { CampaignReviews } from "@/components/modules/campaign/reviews/CampaignReviews";
+import { MilestoneFundRelease } from "@/components/modules/campaign/milestones/MilestoneFundRelease";
 import { TOP_BACKERS_LIMIT } from "@/types/campaign-backers";
 import { CampaignFundingVelocityChart } from "@/components/modules/campaign/FundingVelocityChart";
+import { FundingCounter } from "@/components/modules/campaign/FundingCounter";
+import { CampaignAccessibilityControls } from "@/components/modules/campaign/CampaignAccessibilityControls";
+import { CampaignImpactCalculator } from "@/components/modules/impact/CampaignImpactCalculator";
+import { BackerRoiCalculator } from "@/components/modules/campaign/roi/BackerRoiCalculator";
+import { CampaignFollow } from "@/components/modules/campaign/CampaignFollow";
 import { VerificationMediaGallery, type VerificationMediaItem } from "@/components/modules/campaign/VerificationMediaGallery";
+import { CO2SequestrationProjection } from "@/components/modules/dashboard/CO2SequestrationProjection";
+import CampaignSustainabilityScore from "@/components/modules/campaign/sustainability/CampaignSustainabilityScore";
+import { calculateSustainabilityScore } from "@/lib/sustainability-score";
+import { CampaignSustainabilityScore } from "@/components/modules/campaign/sustainability/CampaignSustainabilityScore";
+import { SustainabilityScoreBadge } from "@/components/modules/campaign/sustainability/SustainabilityScoreBadge";
+import { OneTimeDonationButton } from "@/components/modules/campaign/donation/OneTimeDonationButton";
+import { CampaignCharityBadge } from "@/components/modules/campaign/CharityBadge";
+import { StaffPickBadge } from "@/components/modules/campaign/StaffPickBadge";
+import { CampaignLiveStreamSection } from "@/components/modules/campaign/live-stream/CampaignLiveStreamSection";
 
 const translations = {
+  en: {
+    title: "Save the Amazon RainForest Reserve",
+    shortDescription: "Protecting 50,000 hectares of primary rainforest through community-led guardianship and carbon streaming.",
+    fullStory: "The Amazon RainForest Reserve project empowers indigenous communities to monitor, protect, and restore critical wildlife corridors. Funds raised are locked in transparent Stellar payment streams for anti-poaching operations, satellite mapping, and sustainable agriculture.",
+    impactStatement: "Permanently offset 150 metric tons of CO2 while securing habitat for 200+ endangered species.",
+  },
   es: {
     title: "Salvemos la Reserva de la Selva Amazónica",
     shortDescription: "Protegiendo 50,000 hectáreas de bosque primario mediante guardianía comunitaria y streaming de carbono.",
@@ -54,9 +83,147 @@ const translations = {
     fullStory: "Le projet Réserve de la forêt amazonienne permet aux communautés autochtones de surveiller, protéger et restaurer des corridors fauniques critiques. Les fonds collectés sont verrouillés dans des flux de paiement transparents sur Stellar pour les opérations anti-braconnage, la cartographie par satellite et l'agriculture durable.",
     impactStatement: "Compenser durablement 150 tonnes métriques de CO2 tout en sécurisant l'habitat de plus de 200 espèces menacées.",
   },
+  de: {
+    title: "Rettet das Amazonas-Regenwaldreservat",
+    shortDescription: "Schutz von 50.000 Hektar Primärwald durch gemeinschaftliche Bewachung und transparente CO2-Finanzierung.",
+    fullStory: "Das Amazonas-Regenwaldreservat befähigt indigene Gemeinschaften, wichtige Wildtierkorridore zu überwachen, zu schützen und wiederherzustellen. Die gesammelten Mittel werden in transparente Stellar-Zahlungsströme eingebunden, um Wildereibekämpfung, Satellitenkartierung und nachhaltige Landwirtschaft zu finanzieren.",
+    impactStatement: "Dauerhafte Bindung von 150 Tonnen CO2 bei gleichzeitigem Schutz des Lebensraums von mehr als 200 gefährdeten Arten.",
+  },
+  zh: {
+    title: "守护亚马逊雨林保护区",
+    shortDescription: "通过社区守护和碳资金流，保护五万公顷原始雨林。",
+    fullStory: "亚马逊雨林保护区项目支持当地原住民社区监测、保护并修复重要的野生动物廊道。筹集的资金通过 Stellar 透明支付流用于反盗猎行动、卫星测绘和可持续农业。",
+    impactStatement: "永久抵消150公吨二氧化碳，同时保护200多种濒危物种的栖息地。",
+  },
+  ja: {
+    title: "アマゾン熱帯雨林保護区を守ろう",
+    shortDescription: "地域コミュニティによる保全活動と炭素資金の流れを通じて、5万ヘクタールの原生林を守ります。",
+    fullStory: "アマゾン熱帯雨林保護区プロジェクトは、先住民コミュニティが重要な野生生物回廊を監視、保護、再生できるよう支援します。集められた資金はStellar上の透明な決済フローに預けられ、密猟対策、衛星地図作成、持続可能な農業に活用されます。",
+    impactStatement: "150トンのCO2を恒久的に相殺し、200種以上の絶滅危惧種の生息地を守ります。",
+  },
+  ar: {
+    title: "أنقذوا محمية غابات الأمازون المطيرة",
+    shortDescription: "حماية 50,000 هكتار من الغابات الأصلية عبر حراسة المجتمعات المحلية وتدفقات تمويل الكربون.",
+    fullStory: "يمكّن مشروع محمية الأمازون المجتمعات الأصلية من مراقبة ممرات الحياة البرية المهمة وحمايتها واستعادتها. تُحفظ الأموال المجمعة في تدفقات دفع شفافة على Stellar لتمويل مكافحة الصيد غير المشروع ورسم الخرائط عبر الأقمار الصناعية والزراعة المستدامة.",
+    impactStatement: "تعويض 150 طنًا متريًا من ثاني أكسيد الكربون بشكل دائم مع حماية موائل أكثر من 200 نوع مهدد بالانقراض.",
+  },
+  it: {
+    title: "Salviamo la riserva della foresta amazzonica",
+    shortDescription: "Proteggiamo 50.000 ettari di foresta primaria con la tutela delle comunità locali e flussi di finanziamento del carbonio.",
+    fullStory: "Il progetto della riserva amazzonica consente alle comunità indigene di monitorare, proteggere e ripristinare corridoi essenziali per la fauna selvatica. I fondi raccolti sono custoditi in flussi di pagamento trasparenti su Stellar per finanziare operazioni anti-bracconaggio, mappe satellitari e agricoltura sostenibile.",
+    impactStatement: "Compensare in modo permanente 150 tonnellate di CO2 proteggendo l'habitat di oltre 200 specie a rischio.",
+  },
+  ru: {
+    title: "Сохраним заповедник тропических лесов Амазонии",
+    shortDescription: "Защита 50 000 гектаров первичных лесов силами местных сообществ и за счет прозрачного финансирования углеродных проектов.",
+    fullStory: "Проект заповедника Амазонии помогает коренным общинам наблюдать за важными коридорами дикой природы, защищать и восстанавливать их. Собранные средства поступают в прозрачные платежные потоки Stellar и направляются на борьбу с браконьерством, спутниковое картографирование и устойчивое сельское хозяйство.",
+    impactStatement: "Навсегда компенсировать 150 тонн CO2 и сохранить среду обитания более 200 исчезающих видов.",
+  },
+  ko: {
+    title: "아마존 열대우림 보호구역을 지켜 주세요",
+    shortDescription: "지역 사회의 보호 활동과 탄소 재원 흐름을 통해 원시림 5만 헥타르를 보호합니다.",
+    fullStory: "아마존 열대우림 보호구역 프로젝트는 원주민 공동체가 중요한 야생동물 통로를 감시하고 보호하며 복원하도록 지원합니다. 모금된 자금은 Stellar의 투명한 결제 흐름에 보관되어 밀렵 방지 활동, 위성 지도 제작, 지속 가능한 농업에 사용됩니다.",
+    impactStatement: "이산화탄소 150톤을 영구 상쇄하고 멸종 위기종 200여 종의 서식지를 보호합니다.",
+  },
+  nl: {
+    title: "Red het Amazone-regenwoudreservaat",
+    shortDescription: "Bescherm 50.000 hectare oerbos met gemeenschapsbewaking en transparante financiering van CO2-projecten.",
+    fullStory: "Het Amazone-reservaatproject stelt inheemse gemeenschappen in staat belangrijke corridors voor wilde dieren te bewaken, beschermen en herstellen. Het ingezamelde geld wordt vastgezet in transparante Stellar-betaalstromen voor de bestrijding van stroperij, satellietkaarten en duurzame landbouw.",
+    impactStatement: "Permanent 150 ton CO2 compenseren en tegelijk het leefgebied van meer dan 200 bedreigde soorten beschermen.",
+  },
+  pl: {
+    title: "Ocalmy amazoński rezerwat lasów deszczowych",
+    shortDescription: "Chronimy 50 000 hektarów pierwotnego lasu dzięki opiece lokalnych społeczności i finansowaniu ochrony klimatu.",
+    fullStory: "Projekt rezerwatu Amazonii wspiera rdzenne społeczności w monitorowaniu, ochronie i odtwarzaniu ważnych korytarzy dzikiej przyrody. Zebrane środki trafiają do przejrzystych strumieni płatności Stellar i finansują walkę z kłusownictwem, mapowanie satelitarne oraz zrównoważone rolnictwo.",
+    impactStatement: "Trwale zrównoważyć 150 ton CO2 i chronić siedliska ponad 200 zagrożonych gatunków.",
+  },
+  tr: {
+    title: "Amazon Yağmur Ormanı Koruma Alanı'nı kurtarın",
+    shortDescription: "Toplum gözetimi ve şeffaf karbon finansmanı ile 50.000 hektar birincil ormanı koruyun.",
+    fullStory: "Amazon Koruma Alanı projesi, yerli toplulukların önemli yaban hayatı koridorlarını izlemesine, korumasına ve onarmasına destek olur. Toplanan fonlar, kaçak avcılıkla mücadele, uydu haritalama ve sürdürülebilir tarım için Stellar üzerindeki şeffaf ödeme akışlarında tutulur.",
+    impactStatement: "150 metrik ton CO2'yi kalıcı olarak dengeleyin ve nesli tehlikedeki 200'den fazla türün yaşam alanını koruyun.",
+  },
+  vi: {
+    title: "Cứu lấy khu bảo tồn rừng mưa Amazon",
+    shortDescription: "Bảo vệ 50.000 hecta rừng nguyên sinh thông qua hoạt động gìn giữ của cộng đồng và nguồn tài trợ carbon minh bạch.",
+    fullStory: "Dự án Khu bảo tồn Amazon hỗ trợ cộng đồng bản địa giám sát, bảo vệ và phục hồi các hành lang sinh thái quan trọng. Nguồn quỹ được khóa trong các luồng thanh toán minh bạch trên Stellar để tài trợ chống săn trộm, lập bản đồ vệ tinh và nông nghiệp bền vững.",
+    impactStatement: "Bù đắp vĩnh viễn 150 tấn CO2 đồng thời bảo vệ môi trường sống của hơn 200 loài có nguy cơ tuyệt chủng.",
+  },
+  th: {
+    title: "ร่วมอนุรักษ์เขตป่าฝนอเมซอน",
+    shortDescription: "ปกป้องป่าดั้งเดิม 50,000 เฮกตาร์ด้วยการดูแลของชุมชนและเงินทุนด้านคาร์บอนที่โปร่งใส",
+    fullStory: "โครงการเขตอนุรักษ์อเมซอนสนับสนุนชุมชนพื้นเมืองในการติดตาม ปกป้อง และฟื้นฟูเส้นทางสำคัญของสัตว์ป่า เงินทุนที่ระดมได้จะอยู่ในระบบชำระเงินที่โปร่งใสบน Stellar เพื่อสนับสนุนการต่อต้านการล่าสัตว์ การทำแผนที่ดาวเทียม และเกษตรกรรมที่ยั่งยืน",
+    impactStatement: "ชดเชย CO2 จำนวน 150 เมตริกตันอย่างถาวร พร้อมปกป้องถิ่นที่อยู่อาศัยของสัตว์ใกล้สูญพันธุ์กว่า 200 ชนิด",
+  },
+  id: {
+    title: "Selamatkan Cagar Hutan Hujan Amazon",
+    shortDescription: "Lindungi 50.000 hektare hutan primer melalui penjagaan masyarakat dan pendanaan karbon yang transparan.",
+    fullStory: "Proyek Cagar Amazon memberdayakan masyarakat adat untuk memantau, melindungi, dan memulihkan koridor satwa liar yang penting. Dana yang terkumpul disimpan dalam aliran pembayaran Stellar yang transparan untuk mendukung pemberantasan perburuan liar, pemetaan satelit, dan pertanian berkelanjutan.",
+    impactStatement: "Mengimbangi 150 ton metrik CO2 secara permanen sekaligus melindungi habitat lebih dari 200 spesies terancam.",
+  },
+  hi: {
+    title: "अमेज़न वर्षावन अभयारण्य को बचाएँ",
+    shortDescription: "समुदाय आधारित संरक्षण और पारदर्शी कार्बन वित्तपोषण से 50,000 हेक्टेयर प्राचीन वन की रक्षा करें।",
+    fullStory: "अमेज़न अभयारण्य परियोजना मूल निवासी समुदायों को महत्वपूर्ण वन्यजीव गलियारों की निगरानी, सुरक्षा और बहाली में सक्षम बनाती है। जुटाई गई धनराशि Stellar के पारदर्शी भुगतान प्रवाह में रखी जाती है और अवैध शिकार विरोधी अभियानों, उपग्रह मानचित्रण तथा टिकाऊ कृषि के लिए उपयोग होती है।",
+    impactStatement: "200 से अधिक संकटग्रस्त प्रजातियों के आवास की रक्षा करते हुए 150 मीट्रिक टन CO2 की स्थायी भरपाई करें।",
+  },
+  bn: {
+    title: "আমাজন রেইনফরেস্ট সংরক্ষণাঞ্চল রক্ষা করুন",
+    shortDescription: "স্থানীয় জনগোষ্ঠীর তত্ত্বাবধান ও স্বচ্ছ কার্বন অর্থায়নের মাধ্যমে ৫০,০০০ হেক্টর আদি বন রক্ষা করুন।",
+    fullStory: "আমাজন সংরক্ষণ প্রকল্প আদিবাসী জনগোষ্ঠীকে গুরুত্বপূর্ণ বন্যপ্রাণী চলাচলের পথ পর্যবেক্ষণ, সুরক্ষা ও পুনরুদ্ধারে সহায়তা করে। সংগৃহীত তহবিল Stellar-এর স্বচ্ছ পেমেন্ট প্রবাহে রাখা হয় এবং চোরাশিকার দমন, স্যাটেলাইট মানচিত্র ও টেকসই কৃষিতে ব্যয় করা হয়।",
+    impactStatement: "২০০টিরও বেশি বিপন্ন প্রজাতির আবাসস্থল রক্ষা করে স্থায়ীভাবে ১৫০ মেট্রিক টন CO2 পূরণ করুন।",
+  },
+  fa: {
+    title: "از ذخیره‌گاه جنگل‌های بارانی آمازون محافظت کنیم",
+    shortDescription: "حفاظت از ۵۰٬۰۰۰ هکتار جنگل بکر با نگهبانی جوامع محلی و تأمین مالی شفاف کربن.",
+    fullStory: "پروژه ذخیره‌گاه آمازون به جوامع بومی کمک می‌کند گذرگاه‌های مهم حیات‌وحش را پایش، محافظت و احیا کنند. کمک‌های جمع‌آوری‌شده در جریان‌های پرداخت شفاف Stellar نگهداری می‌شوند تا صرف مبارزه با شکار غیرقانونی، نقشه‌برداری ماهواره‌ای و کشاورزی پایدار شوند.",
+    impactStatement: "جبران دائمی ۱۵۰ تن متریک CO2 و محافظت از زیستگاه بیش از ۲۰۰ گونه در معرض خطر.",
+  },
+  sw: {
+    title: "Okoa Hifadhi ya Msitu wa Mvua wa Amazon",
+    shortDescription: "Linda hekta 50,000 za msitu wa asili kupitia uangalizi wa jamii na ufadhili wa kaboni ulio wazi.",
+    fullStory: "Mradi wa Hifadhi ya Amazon huwezesha jamii za wenyeji kufuatilia, kulinda na kurejesha njia muhimu za wanyamapori. Fedha zilizochangwa huhifadhiwa katika mifumo ya malipo ya Stellar iliyo wazi ili kusaidia kupambana na ujangili, kutengeneza ramani za satelaiti na kilimo endelevu.",
+    impactStatement: "Fidia tani 150 za CO2 kabisa huku ukilinda makazi ya zaidi ya spishi 200 zilizo hatarini.",
+  },
+  uk: {
+    title: "Збережімо заповідник тропічних лісів Амазонії",
+    shortDescription: "Захист 50 000 гектарів первісного лісу завдяки опіці громад і прозорому фінансуванню кліматичних проєктів.",
+    fullStory: "Проєкт заповідника Амазонії допомагає корінним громадам стежити за важливими коридорами дикої природи, захищати й відновлювати їх. Зібрані кошти зберігаються у прозорих платіжних потоках Stellar і спрямовуються на боротьбу з браконьєрством, супутникове картографування та стале сільське господарство.",
+    impactStatement: "Назавжди компенсувати 150 тонн CO2 і зберегти середовище існування понад 200 видів під загрозою зникнення.",
+  },
+  ms: {
+    title: "Selamatkan Hutan Hujan Simpanan Amazon",
+    shortDescription: "Lindungi 50,000 hektar hutan primer melalui penjagaan komuniti dan pembiayaan karbon yang telus.",
+    fullStory: "Projek Simpanan Amazon memperkasa komuniti orang asli untuk memantau, melindungi dan memulihkan koridor hidupan liar yang penting. Dana yang dikumpul disimpan dalam aliran pembayaran Stellar yang telus untuk membiayai usaha membanteras pemburuan haram, pemetaan satelit dan pertanian mampan.",
+    impactStatement: "Mengimbangi 150 tan metrik CO2 secara kekal sambil melindungi habitat lebih 200 spesies terancam.",
+  },
+  ro: {
+    title: "Salvați rezervația pădurii amazoniene",
+    shortDescription: "Protejăm 50.000 de hectare de pădure primară prin îngrijirea comunităților și finanțare transparentă pentru carbon.",
+    fullStory: "Proiectul rezervației Amazonului ajută comunitățile indigene să monitorizeze, să protejeze și să refacă coridoarele esențiale pentru fauna sălbatică. Fondurile strânse sunt păstrate în fluxuri de plată transparente pe Stellar pentru combaterea braconajului, cartografiere prin satelit și agricultură durabilă.",
+    impactStatement: "Compensăm permanent 150 de tone de CO2 și protejăm habitatul a peste 200 de specii pe cale de dispariție.",
+  },
+  el: {
+    title: "Σώστε το καταφύγιο του τροπικού δάσους του Αμαζονίου",
+    shortDescription: "Προστατεύουμε 50.000 εκτάρια πρωτογενούς δάσους με τη φροντίδα των κοινοτήτων και διαφανή χρηματοδότηση άνθρακα.",
+    fullStory: "Το έργο του καταφυγίου του Αμαζονίου ενδυναμώνει τις αυτόχθονες κοινότητες να παρακολουθούν, να προστατεύουν και να αποκαθιστούν κρίσιμους διαδρόμους άγριας ζωής. Τα κεφάλαια διατηρούνται σε διαφανείς ροές πληρωμών στο Stellar για την καταπολέμηση της λαθροθηρίας, τη δορυφορική χαρτογράφηση και τη βιώσιμη γεωργία.",
+    impactStatement: "Μόνιμη αντιστάθμιση 150 μετρικών τόνων CO2 και προστασία του βιότοπου περισσότερων από 200 απειλούμενων ειδών.",
+  },
+  he: {
+    title: "הצילו את שמורת יערות הגשם באמזונס",
+    shortDescription: "הגנה על 50,000 הקטרים של יער ראשוני באמצעות שמירה קהילתית ומימון פחמן שקוף.",
+    fullStory: "פרויקט שמורת האמזונס מאפשר לקהילות ילידיות לנטר, להגן ולשקם מסדרונות חשובים לחיות הבר. הכספים שנאספים מוחזקים בזרמי תשלום שקופים ב-Stellar למימון מאבק בציד בלתי חוקי, מיפוי לווייני וחקלאות בת קיימא.",
+    impactStatement: "קיזוז קבוע של 150 טונות CO2 תוך הגנה על בתי הגידול של יותר מ-200 מינים בסכנת הכחדה.",
+  },
+  ur: {
+    title: "ایمازون کے برساتی جنگلات کے محفوظ علاقے کو بچائیں",
+    shortDescription: "مقامی برادریوں کی نگرانی اور شفاف کاربن مالی معاونت کے ذریعے 50,000 ہیکٹر قدیم جنگل کا تحفظ۔",
+    fullStory: "ایمازون محفوظ علاقے کا منصوبہ مقامی برادریوں کو جنگلی حیات کی اہم گزرگاہوں کی نگرانی، حفاظت اور بحالی کے قابل بناتا ہے۔ جمع شدہ رقوم Stellar کے شفاف ادائیگی کے نظام میں رکھی جاتی ہیں تاکہ غیر قانونی شکار کی روک تھام، سیٹلائٹ نقشہ سازی اور پائیدار زراعت میں مدد ملے۔",
+    impactStatement: "200 سے زیادہ خطرے سے دوچار انواع کے مسکن کی حفاظت کرتے ہوئے 150 میٹرک ٹن CO2 کی مستقل تلافی کریں۔",
+  },
 } as const;
 
-const languageNames: Record<string, string> = {
+const languageNames: Record<TranslationKey, string> = {
   en: "English",
   es: "Spanish",
   pt: "Portuguese",
@@ -67,10 +234,30 @@ const languageNames: Record<string, string> = {
   ko: "Korean",
   ar: "Arabic",
   ru: "Russian",
+  it: "Italiano",
+  nl: "Nederlands",
+  pl: "Polski",
+  tr: "Türkçe",
+  vi: "Tiếng Việt",
+  th: "ไทย",
+  id: "Bahasa Indonesia",
+  hi: "हिन्दी",
+  bn: "বাংলা",
+  fa: "فارسی",
+  sw: "Kiswahili",
+  uk: "Українська",
+  ms: "Bahasa Melayu",
+  ro: "Română",
+  el: "Ελληνικά",
+  he: "עברית",
+  ur: "اردو",
 };
 
 type TranslationKey = keyof typeof translations;
 
+function isTranslationKey(value: string): value is TranslationKey {
+  return Object.prototype.hasOwnProperty.call(translations, value);
+}
 const verificationMedia: VerificationMediaItem[] = [
   {
     id: "field-photo-north-canopy",
@@ -114,12 +301,140 @@ const detectLanguage = (text: string): string => {
   return "en";
 };
 
+export interface CampaignMilestone {
+  id: string;
+  label: string;
+  /** Milestone threshold as a percentage of the funding goal (0-100). */
+  percentage: number;
+}
+
+export const DEFAULT_CAMPAIGN_MILESTONES: CampaignMilestone[] = [
+  { id: "milestone-25", label: "25%", percentage: 25 },
+  { id: "milestone-50", label: "50%", percentage: 50 },
+  { id: "milestone-75", label: "75%", percentage: 75 },
+  { id: "milestone-100", label: "100%", percentage: 100 },
+];
+
+interface MilestoneProgressBarProps {
+  milestones?: CampaignMilestone[];
+  raisedAmount: string | number;
+  goalAmount: string | number;
+  token?: string;
+}
+
+function parseAmount(value: string | number): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const parsed = Number.parseFloat(value.replace(/,/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function MilestoneProgressBar({
+  milestones,
+  raisedAmount,
+  goalAmount,
+  token = "XLM",
+}: MilestoneProgressBarProps) {
+  const goal = parseAmount(goalAmount);
+  const raised = parseAmount(raisedAmount);
+  const progressPct = goal > 0 ? Math.min(100, Math.max(0, (raised / goal) * 100)) : 0;
+
+  const sortedMilestones = React.useMemo(
+    () =>
+      [...(milestones && milestones.length > 0 ? milestones : DEFAULT_CAMPAIGN_MILESTONES)].sort(
+        (a, b) => a.percentage - b.percentage
+      ),
+    [milestones]
+  );
+
+  const nextMilestone = sortedMilestones.find((milestone) => progressPct < milestone.percentage);
+  const achievedCount = sortedMilestones.filter((milestone) => progressPct >= milestone.percentage).length;
+
+  return (
+    <section
+      aria-label="Campaign milestone progress"
+      className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-4"
+    >
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-purple-400">Funding Milestones</h3>
+        <span className="text-[11px] text-zinc-400">
+          {achievedCount} / {sortedMilestones.length} reached
+        </span>
+      </div>
+
+      <div className="relative pt-6 pb-8">
+        {/* Track */}
+        <div className="relative h-2 w-full overflow-hidden rounded-full bg-zinc-800">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-purple-500 via-indigo-500 to-emerald-400 transition-all duration-500"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+
+        {/* Milestone markers */}
+        {sortedMilestones.map((milestone) => {
+          const achieved = progressPct >= milestone.percentage;
+          const isNext = nextMilestone?.id === milestone.id;
+          return (
+            <div
+              key={milestone.id}
+              className="absolute top-0 flex -translate-x-1/2 flex-col items-center"
+              style={{ left: `${Math.min(100, Math.max(0, milestone.percentage))}%` }}
+            >
+              <span
+                role="img"
+                aria-label={`${milestone.label} milestone ${achieved ? "reached" : "not reached"}`}
+                className={`h-3 w-3 rounded-full border-2 transition-colors ${
+                  achieved
+                    ? "border-emerald-400 bg-emerald-400"
+                    : isNext
+                      ? "border-purple-400 bg-zinc-900 ring-2 ring-purple-500/40"
+                      : "border-zinc-600 bg-zinc-900"
+                }`}
+              />
+              <span
+                className={`mt-1 whitespace-nowrap text-[10px] font-semibold ${
+                  achieved ? "text-emerald-400" : isNext ? "text-purple-300" : "text-zinc-500"
+                }`}
+              >
+                {milestone.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="text-xs text-zinc-400" aria-live="polite">
+        {nextMilestone ? (
+          <>
+            Next milestone: <strong className="text-purple-300">{nextMilestone.label}</strong>{" "}
+            ({nextMilestone.percentage}% of goal)
+          </>
+        ) : (
+          <span className="text-emerald-400 font-semibold">All milestones reached — goal achieved!</span>
+        )}
+      </p>
+
+      <p className="text-[11px] text-zinc-500">
+        {raised.toLocaleString()} / {goal.toLocaleString()} {token} raised ({Math.round(progressPct)}%)
+      </p>
+    </section>
+  );
+}
+
 export default function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  useEffect(() => {
+    const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]') ?? document.createElement("link");
+    canonical.rel = "canonical";
+    canonical.href = `${window.location.origin}/campaigns/${encodeURIComponent(id)}`;
+    if (!canonical.parentNode) document.head.appendChild(canonical);
+    return () => canonical.remove();
+  }, [id]);
   const [activeTab, setActiveTab] = useState("overview");
   const [showInsuranceModal, setShowInsuranceModal] = useState(false);
   const [claimSubmitted, setClaimSubmitted] = useState(false);
   const [showARModal, setShowARModal] = useState(false);
+  const [waitlistCount, setWaitlistCount] = useState(0);
 
   // Mock campaign record data
   const campaign = {
@@ -140,6 +455,12 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
     co2OffsetTons: "150",
     treeType: "Oak",
     location: "Amazon Basin, Brazil",
+    sustainability: {
+      treeSpeciesDiversity: 82,
+      regionClimateImpact: 74,
+      soilHealthImprovement: 68,
+      biodiversityPotential: 88,
+    },
     successStory: {
       headline: "From Rainforest Pledge to On-the-Ground Impact",
       creatorInterview: "Every XLM stream is tied to verifiable patrol hours and backers receive monthly GPS updates. The team shipped on every promise.",
@@ -150,7 +471,30 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       ],
     },
     treesPlanted: "1,500",
+    targetTrees: 2000,
+    treeType: "Mangrove",
+    location: "Amazon Basin, South America",
+    isStaffPick: true,
+    staffPickReason: "Outstanding community guardianship and verifiable canopy restoration.",
+    isComingSoon: true,
+    milestones: DEFAULT_CAMPAIGN_MILESTONES,
   };
+
+  const sustainabilityScore = React.useMemo(
+    () =>
+      calculateSustainabilityScore({
+        treeType: campaign.treeType,
+        location: campaign.location,
+        treesPlanted: campaign.treesPlanted,
+        description: campaign.shortDescription,
+        category: campaign.category,
+      }),
+    [campaign.treeType, campaign.location, campaign.treesPlanted, campaign.shortDescription, campaign.category]
+  );
+
+  const raised = Number(campaign.raisedAmount.replace(/,/g, ""));
+  const goal = Number(campaign.goalAmount.replace(/,/g, ""));
+  const progressPct = goal > 0 ? Math.min(100, Math.round((raised / goal) * 100)) : 0;
 
   // The mock detail page renders as the campaign creator, so creator-only
   // controls (featuring backers, managing community spaces) are exercised.
@@ -163,38 +507,86 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const [translationLang, setTranslationLang] = useState<TranslationKey | "">("");
   const translation = translationLang ? translations[translationLang] : null;
 
-  const progressPct = Math.min(
-    100,
-    Math.round(
-      (parseFloat(campaign.raisedAmount.replace(/,/g, "")) /
-        parseFloat(campaign.goalAmount.replace(/,/g, ""))) *
-        100
-    )
-  );
+  // Pre-launch waitlist: when a campaign is marked "coming soon", the detail
+  // page renders a teaser + email capture instead of the pledge/funding UI.
+  if (campaign.isComingSoon) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-4xl space-y-8">
+        <Link
+          href="/campaigns"
+          aria-label="Back to Campaigns Directory"
+          className="inline-flex items-center text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
+        >
+          <ArrowLeft className="mr-1 h-3.5 w-3.5" /> Back to Campaigns Directory
+        </Link>
+
+        <div className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-gradient-to-r from-zinc-900 via-purple-950/20 to-zinc-900 p-6 md:p-10 shadow-2xl space-y-4">
+          <div className="flex items-center gap-2.5">
+            <Badge className="bg-purple-600 text-white font-semibold text-xs">{campaign.category}</Badge>
+            <Badge variant="outline" className="border-amber-500 text-amber-400 text-xs font-semibold">
+              <Bell className="mr-1 h-3 w-3" /> Coming Soon
+            </Badge>
+          </div>
+          <h1 className="text-3xl font-extrabold text-zinc-50 tracking-tight">{campaign.title}</h1>
+          <p className="text-sm text-zinc-300 leading-relaxed">{campaign.shortDescription}</p>
+          <p className="text-sm text-amber-200/90 italic bg-amber-950/20 p-4 rounded-lg border border-amber-900/30">
+            &ldquo;{campaign.impactStatement}&rdquo;
+          </p>
+          <div className="flex items-center gap-4 text-xs text-zinc-400 pt-2">
+            <span>Created by: <strong className="text-zinc-200 font-mono">{campaign.creator}</strong></span>
+            <span>Launching: <strong className="text-zinc-200">{campaign.startDate}</strong></span>
+          </div>
+        </div>
+
+        <CampaignWaitlist
+          campaignId={campaign.id}
+          campaignTitle={campaign.title}
+          launchDate={campaign.startDate}
+          onCountChange={setWaitlistCount}
+        />
+
+        {waitlistCount > 0 && (
+          <p role="status" aria-live="polite" className="text-center text-xs text-zinc-400">
+            {waitlistCount} {waitlistCount === 1 ? "person has" : "people have"} joined the waitlist. You&apos;ll be notified at launch.
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-6xl space-y-8">
+    <div
+      dir={translationLang === "ar" || translationLang === "fa" || translationLang === "he" || translationLang === "ur" ? "rtl" : "ltr"}
+      lang={translationLang || detectedLang}
+      className="campaign-accessible container mx-auto px-4 py-8 max-w-6xl space-y-8"
+    >
+    <main className="container mx-auto px-4 py-8 max-w-6xl space-y-8" aria-label="Campaign details">
       {/* Navigation Top */}
       <div className="flex items-center justify-between">
         <Link
           href="/campaigns"
+          aria-label="Back to Campaigns Directory"
           className="inline-flex items-center text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
         >
           <ArrowLeft className="mr-1 h-3.5 w-3.5" /> Back to Campaigns Directory
         </Link>
 
         <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-emerald-600/40 text-emerald-300 hover:bg-emerald-950/40 text-xs"
-            onClick={() => setShowARModal(true)}
-          >
-            <Eye className="mr-1.5 h-3.5 w-3.5" /> Visualize in AR
-          </Button>
+          <CampaignAccessibilityControls />
+          <Link href={`/campaigns/${id}/donate`}>
+            <Button size="sm" variant="outline" className="border-rose-600/40 text-rose-300 hover:bg-rose-950/40 text-xs">
+              <Heart className="mr-1.5 h-3.5 w-3.5" /> Donate
+            </Button>
+          </Link>
+          <OneTimeDonationButton campaignId={campaign.id} campaignName={campaign.title} />
           <Link href="/campaigns/create">
             <Button size="sm" variant="outline" className="border-purple-600/40 text-purple-300 hover:bg-purple-950/40 text-xs">
               <Edit className="mr-1.5 h-3.5 w-3.5" /> Edit Campaign
+            </Button>
+          </Link>
+          <Link href="/campaigns/social-scheduler">
+            <Button size="sm" variant="outline" className="border-sky-600/40 text-sky-300 hover:bg-sky-950/40 text-xs">
+              Schedule Promotions
             </Button>
           </Link>
           <Button
@@ -205,20 +597,47 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           >
             <AlertTriangle className="mr-1.5 h-3.5 w-3.5" /> Submit Insurance Claim
           </Button>
+          <a
+            href={`/api/reports/campaign/${id}`}
+            download
+            aria-label="Download campaign impact report as PDF"
+            className="inline-flex items-center gap-1.5 rounded-md border border-emerald-600/40 px-3 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-950/40"
+          >
+            <Download className="h-3.5 w-3.5" /> Impact Report
+          </a>
         </div>
       </div>
 
       {showInsuranceModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="insurance-modal-title"
+          aria-describedby="insurance-modal-description"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setShowInsuranceModal(false);
+              setClaimSubmitted(false);
+            }
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+        >
           <div className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-zinc-100">Submit Insurance Claim</h2>
-              <button type="button" onClick={() => { setShowInsuranceModal(false); setClaimSubmitted(false); }} className="text-zinc-400 hover:text-zinc-200 text-xl">×</button>
+              <h2 id="insurance-modal-title" className="text-lg font-bold text-zinc-100">Submit Insurance Claim</h2>
+              <button
+                type="button"
+                aria-label="Close insurance claim modal"
+                onClick={() => { setShowInsuranceModal(false); setClaimSubmitted(false); }}
+                className="text-zinc-400 hover:text-zinc-200 text-xl p-1 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-600"
+              >
+                ×
+              </button>
             </div>
             {claimSubmitted ? (
-              <div className="space-y-2">
+              <div role="status" aria-live="polite" className="space-y-2">
                 <p className="text-sm text-emerald-400 font-semibold">Claim submitted successfully.</p>
-                <p className="text-xs text-zinc-400">The campaign creator has submitted proof of failure. The insurance review process will evaluate your claim and pay out if eligible.</p>
+                <p id="insurance-modal-description" className="text-xs text-zinc-400">The campaign creator has submitted proof of failure. The insurance review process will evaluate your claim and pay out if eligible.</p>
               </div>
             ) : (
               <form
@@ -233,6 +652,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
                   <textarea
                     id="evidence"
                     required
+                    aria-required="true"
                     rows={4}
                     className="w-full rounded-md border border-zinc-700 bg-zinc-950 p-3 text-sm text-zinc-200 focus:outline-none focus:ring-2 focus:ring-purple-600"
                     placeholder="Describe why the campaign failed to meet its goals and provide any supporting evidence or links..."
@@ -257,6 +677,15 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
               <Badge variant="outline" className="border-emerald-500 text-emerald-400 text-xs font-semibold">
                 <ShieldCheck className="mr-1 h-3 w-3" /> {campaign.status}
               </Badge>
+              <SustainabilityScoreBadge
+                score={sustainabilityScore.totalScore}
+                tier={sustainabilityScore.tier}
+                size="sm"
+              />
+              {campaign.isStaffPick && (
+                <StaffPickBadge reason={campaign.staffPickReason} size="sm" />
+              )}
+              <CampaignCharityBadge campaignId={campaign.id} />
             </div>
 
             <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -267,13 +696,16 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
               <select
                 className="bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1 text-xs text-zinc-200"
                 value={translationLang}
-                onChange={(e) => setTranslationLang(e.target.value as TranslationKey | "")}
+                onChange={(event) => {
+                  const locale = event.target.value;
+                  setTranslationLang(isTranslationKey(locale) ? locale : "");
+                }}
                 aria-label="Translate campaign description"
               >
                 <option value="">Original ({detectedLanguageName})</option>
-                <option value="es">Spanish</option>
-                <option value="pt">Portuguese</option>
-                <option value="fr">French</option>
+                {Object.entries(languageNames).map(([locale, name]) => (
+                  <option key={locale} value={locale}>{name}</option>
+                ))}
               </select>
             </div>
 
@@ -284,14 +716,22 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
               {translation?.shortDescription ?? campaign.shortDescription}
             </p>
 
+            <CampaignFollow campaignId={campaign.id} />
+
             <div className="flex items-center gap-4 text-xs text-zinc-400 pt-2">
               <span>Created by: <strong className="text-zinc-200 font-mono">{campaign.creator}</strong></span>
               <span>Ends: <strong className="text-zinc-200">{campaign.endDate}</strong></span>
             </div>
           </div>
 
-          {/* Raise Goal Card */}
+          {/* Raise Goal Card — rolling real-time funding counter (#1259) */}
           <div className="w-full md:w-80 rounded-xl border border-zinc-800 bg-zinc-950/80 p-5 space-y-4 shadow-xl">
+            <FundingCounter
+              campaignId={campaign.id}
+              initialRaised={campaign.raisedAmount}
+              initialGoal={campaign.goalAmount}
+              token={campaign.token}
+            />
             <div className="flex items-baseline justify-between">
               <span className="text-xs font-semibold text-zinc-400">Total Raised</span>
               <span className="text-xs font-bold text-emerald-400">{progressPct}% Funded</span>
@@ -304,7 +744,15 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
             </div>
 
             {/* Progress bar */}
-            <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-800">
+            <div
+              role="progressbar"
+              aria-valuenow={progressPct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="Campaign funding progress"
+              aria-valuetext={`${progressPct}% funded (${campaign.raisedAmount} of ${campaign.goalAmount} ${campaign.token})`}
+              className="h-2 w-full overflow-hidden rounded-full bg-zinc-800"
+            >
               <div
                 className="h-full rounded-full bg-gradient-to-r from-purple-500 via-indigo-500 to-emerald-400 transition-all duration-500"
                 style={{ width: `${progressPct}%` }}
@@ -314,9 +762,30 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
             <Button className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 font-bold text-white hover:from-emerald-700 hover:to-teal-700 shadow-md">
               <Heart className="mr-2 h-4 w-4 fill-white" /> Sponsor This Campaign
             </Button>
+
+            {/* Milestone progress bar with markers for each funding milestone */}
+            <MilestoneProgressBar
+              milestones={campaign.milestones}
+              raisedAmount={campaign.raisedAmount}
+              goalAmount={campaign.goalAmount}
+              token={campaign.token}
+            />
+
+            {/* Follow for updates without sponsoring (#942 v1) */}
+            <CampaignFollowButton campaignId={campaign.id} />
           </div>
         </div>
       </div>
+
+      {/* Campaign Sustainability Score - Environmental Index */}
+      <CampaignSustainabilityScore
+        data={{
+          treeSpeciesDiversity: campaign.sustainability.treeSpeciesDiversity,
+          regionClimateImpact: campaign.sustainability.regionClimateImpact,
+          soilHealthImprovement: campaign.sustainability.soilHealthImprovement,
+          biodiversityPotential: campaign.sustainability.biodiversityPotential,
+        }}
+      />
 
       {/* Funding Milestone Achievement Badges (25%, 50%, 75%, 100%) */}
       <CampaignMilestones
@@ -324,12 +793,18 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
         goalAmount={campaign.goalAmount}
       />
 
+      {/* Live streaming: YouTube/Twitch player, replay links, creator controls (#1225) */}
+      <CampaignLiveStreamSection campaignId={campaign.id} />
+
       {/* Main Content Tabs (Overview, Sponsor Wall #724, Top Backers, Co-Creators #722) */}
       {/* Backer community spaces (#788) render inside the overview sidebar. */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-6">
-        <TabsList className="grid w-full grid-cols-2 gap-1 rounded-xl border border-zinc-800 bg-zinc-900 p-1 md:grid-cols-4 xl:grid-cols-8">
+        <TabsList aria-label="Campaign navigation tabs" className="grid w-full grid-cols-2 gap-1 rounded-xl border border-zinc-800 bg-zinc-900 p-1 md:grid-cols-4 xl:grid-cols-8">
           <TabsTrigger value="overview" className="text-xs font-semibold data-[state=active]:bg-purple-600 data-[state=active]:text-white">
             <Target className="mr-1.5 h-4 w-4" /> Overview & Story
+          </TabsTrigger>
+          <TabsTrigger value="ar-view" className="text-xs font-semibold data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
+            <Camera className="mr-1.5 h-4 w-4 text-emerald-300" /> AR Tree View
           </TabsTrigger>
           <TabsTrigger value="sponsors" className="text-xs font-semibold data-[state=active]:bg-purple-600 data-[state=active]:text-white">
             <Heart className="mr-1.5 h-4 w-4 text-rose-400" /> Sponsor Wall (#724)
@@ -351,6 +826,9 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           </TabsTrigger>
           <TabsTrigger value="analytics" className="text-xs font-semibold data-[state=active]:bg-purple-600 data-[state=active]:text-white">
             <BarChart3 className="mr-1.5 h-4 w-4 text-emerald-400" /> Analytics
+          </TabsTrigger>
+          <TabsTrigger value="milestone-release" className="text-xs font-semibold data-[state=active]:bg-purple-600 data-[state=active]:text-white">
+            <Coins className="mr-1.5 h-4 w-4 text-emerald-400" /> Tranche Releases
           </TabsTrigger>
         </TabsList>
 
@@ -395,21 +873,32 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
                 </div>
               </div>
 
+              <CampaignImpactCalculator />
+              {/* Issue #907: real-time CO2 sequestration display, updates as sponsors contribute. */}
+              <CampaignImpactCalculator
+                campaignSpeciesId={campaign.treeType}
+                campaignTreeCount={Number(campaign.treesPlanted.replace(/,/g, ""))}
+                readOnly
+              />
+
+              {/* Backer ROI estimate for revenue-share / equity campaigns (#1244); hidden otherwise. */}
+              <BackerRoiCalculator campaignId={campaign.id} />
+
               <VerificationMediaGallery items={verificationMedia} />
+
+              <CO2SequestrationProjection
+                campaignSpeciesId={campaign.treeType?.toLowerCase()}
+                campaignTreeCount={parseInt(campaign.treesPlanted.replace(/,/g, ""), 10) || undefined}
+              />
             </div>
 
             <div className="space-y-4">
               <CampaignFundingVelocityChart
-                data={[
-                  { label: "Mon", raised: 2600 },
-                  { label: "Tue", raised: 3000 },
-                  { label: "Wed", raised: 4200 },
-                  { label: "Thu", raised: 5800 },
-                  { label: "Fri", raised: 7300 },
-                  { label: "Sat", raised: 8100 },
-                  { label: "Sun", raised: 9600 },
-                ]}
-                currency="XLM"
+                campaignId={campaign.id}
+                startDate={campaign.startDate}
+                endDate={campaign.endDate}
+                granularity="daily"
+                currency={campaign.token}
               />
 
               <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-3">
@@ -429,6 +918,35 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
               <BackerCommunity campaignId={campaign.id} canManage={isCreatorView} />
             </div>
           </div>
+
+          {/* Backer-only exclusive content area (#1267) */}
+          <BackerExclusiveContent
+            campaignId={campaign.id}
+            campaignTitle={campaign.title}
+            creatorAddress={campaign.creator}
+            viewerAddress={viewerAddress}
+            canManage={isCreatorView}
+          />
+
+          {/* Backer testimonials & star ratings (#1250) */}
+          <CampaignReviews campaignId={campaign.id} viewerAddress={viewerAddress} />
+
+          {/* Milestone-based fund release tied to backer approval vote */}
+          <MilestoneFundRelease
+            campaignId={campaign.id}
+            isCreator={isCreatorView}
+            viewerAddress={viewerAddress}
+            campaignStatus={campaign.status}
+          />
+        </TabsContent>
+
+        <TabsContent value="ar-view">
+          <CampaignARVisualizer
+            treesPlanted={Number(campaign.treesPlanted.replace(/,/g, ""))}
+            targetTrees={campaign.targetTrees}
+            treeType={campaign.treeType}
+            location={campaign.location}
+          />
         </TabsContent>
 
         {/* Tab 2: Sponsor Wall (#724) */}
@@ -454,6 +972,12 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
 
         {/* Tab 5: Q&A Moderation (#791) */}
         <TabsContent value="qa">
+          <CampaignLiveQASession
+            campaignId={campaign.id}
+            creatorAddress={campaign.creator}
+            viewerAddress={viewerAddress}
+            isCreator={isCreatorView}
+          />
           <CampaignQAModeration campaignId={campaign.id} campaignTitle={campaign.title} />
         </TabsContent>
 
@@ -497,6 +1021,16 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
         <TabsContent value="analytics">
           <CampaignAnalyticsDashboard campaignId={campaign.id} campaignTitle={campaign.title} />
         </TabsContent>
+
+        {/* Tab 9: Milestone-based fund release tied to backer approval vote */}
+        <TabsContent value="milestone-release">
+          <MilestoneFundRelease
+            campaignId={campaign.id}
+            isCreator={isCreatorView}
+            viewerAddress={viewerAddress}
+            campaignStatus={campaign.status}
+          />
+        </TabsContent>
       </Tabs>
 
       {/* AR Tree Visualizer Modal */}
@@ -510,6 +1044,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           onClose={() => setShowARModal(false)}
         />
       )}
+    </main>
     </div>
   );
 }

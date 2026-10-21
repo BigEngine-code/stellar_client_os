@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Plus, Trash2, Calendar, Target, Sparkles, Layers, Image as ImageIcon, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,11 +13,27 @@ import {
   TOKEN_OPTIONS,
   MilestoneItem,
 } from "./campaign-wizard-config";
+import type { AccessibilityAuditResult } from "@/services/campaign-accessibility.service";
 
 interface StepProps {
   data: CampaignWizardData;
   errors: WizardStepErrors;
   updateField: <K extends keyof CampaignWizardData>(field: K, value: CampaignWizardData[K]) => void;
+}
+
+// Geographic diversity incentive: campaigns spanning multiple countries get 1.2x carbon credits
+const GEOGRAPHIC_DIVERSITY_MULTIPLIER = 1.2;
+const GEOGRAPHIC_DIVERSITY_THRESHOLD = 2;
+
+function computeGeographicMultiplier(countryCount: number): number {
+  return countryCount >= GEOGRAPHIC_DIVERSITY_THRESHOLD ? GEOGRAPHIC_DIVERSITY_MULTIPLIER : 1;
+}
+
+function parseCountryList(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((c) => c.trim())
+    .filter((c) => c.length > 0);
 }
 
 // Step 1: Details Component
@@ -159,6 +175,22 @@ export function DetailsStep({ data, errors, updateField }: StepProps) {
           />
           {errors.imageUrl && <p className="mt-1 text-xs text-rose-400">{errors.imageUrl}</p>}
         </div>
+
+        <div>
+          <Label htmlFor="imageAlt" className="text-zinc-200">
+            Cover Image Alt Text (WCAG 2.1 AA)
+          </Label>
+          <Input
+            id="imageAlt"
+            placeholder="Descriptive text for screen readers (e.g., Rainforest canopy in sunrise)..."
+            value={data.imageAlt || ""}
+            onChange={(e) => updateField("imageAlt", e.target.value)}
+            className="mt-1.5 border-zinc-700 bg-zinc-900 text-zinc-100 placeholder:text-zinc-500"
+          />
+          <p className="mt-1 text-xs text-zinc-500">
+            Required if a cover image is provided to satisfy WCAG 2.1 AA Non-text Content criteria.
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -294,6 +326,20 @@ export function TimelineStep({ data, errors, updateField, addMilestone, removeMi
         </div>
 
         <div>
+          <Label htmlFor="scheduledPublishAt" className="text-zinc-200">
+            Future launch date (optional)
+          </Label>
+          <Input
+            id="scheduledPublishAt"
+            type="datetime-local"
+            value={data.scheduledPublishAt}
+            min={new Date().toISOString().slice(0, 16)}
+            onChange={(e) => updateField("scheduledPublishAt", e.target.value)}
+            className="mt-1.5 border-zinc-700 bg-zinc-900 text-zinc-100 focus:border-emerald-500"
+          />
+          <p className="mt-1 text-xs text-zinc-500">Scheduled campaigns remain private to you until this time.</p>
+        </div>
+        <div>
           <Label htmlFor="endDate" className="text-zinc-200">
             Campaign End Date <span className="text-rose-400">*</span>
           </Label>
@@ -378,6 +424,11 @@ export function TimelineStep({ data, errors, updateField, addMilestone, removeMi
 
 // Step 4: Impact Component
 export function ImpactStep({ data, errors, updateField }: StepProps) {
+  const countries = useMemo(() => parseCountryList(data.targetCountries || ""), [data.targetCountries]);
+  const multiplier = computeGeographicMultiplier(countries.length);
+  const baseOffset = Number(data.co2OffsetTons) || 0;
+  const boostedOffset = Math.round(baseOffset * multiplier);
+
   return (
     <div className="space-y-6">
       <div className="border-b border-zinc-800 pb-4">
@@ -435,6 +486,26 @@ export function ImpactStep({ data, errors, updateField }: StepProps) {
           </div>
 
           <div>
+            <Label htmlFor="targetCountries" className="text-zinc-200 flex items-center gap-1.5">
+              <Sparkles className="h-4 w-4 text-amber-400" />
+              Target Countries (comma-separated)
+            </Label>
+            <Input
+              id="targetCountries"
+              placeholder="e.g. Brazil, Peru, Colombia"
+              value={data.targetCountries || ""}
+              onChange={(e) => updateField("targetCountries", e.target.value)}
+              className="mt-1.5 border-zinc-700 bg-zinc-900 text-zinc-100 placeholder:text-zinc-500"
+            />
+            <p className="mt-1.5 text-xs text-zinc-500">
+              Campaigns spanning {GEOGRAPHIC_DIVERSITY_THRESHOLD}+ countries earn a{" "}
+              {GEOGRAPHIC_DIVERSITY_MULTIPLIER}x carbon credit multiplier, encouraging a global tree
+              planting network over concentrated plantations.
+            </p>
+            {errors.targetCountries && <p className="mt-1 text-xs text-rose-400">{errors.targetCountries}</p>}
+          </div>
+
+          <div>
             <Label htmlFor="socialMetrics" className="text-zinc-200">
               Social Impact KPI (Optional)
             </Label>
@@ -447,17 +518,71 @@ export function ImpactStep({ data, errors, updateField }: StepProps) {
             />
           </div>
         </div>
+
+        {countries.length > 0 && (
+          <div className="rounded-lg border border-amber-800/50 bg-amber-950/20 p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs uppercase font-semibold text-amber-400">
+                Geographic Diversity Incentive
+              </span>
+              <Badge
+                variant="outline"
+                className={
+                  multiplier > 1
+                    ? "border-amber-500 text-amber-300"
+                    : "border-zinc-600 text-zinc-400"
+                }
+              >
+                {multiplier}x Carbon Credits
+              </Badge>
+            </div>
+            <div className="text-xs text-zinc-300">
+              Countries targeted: <strong className="text-zinc-100">{countries.length}</strong>{" "}
+              ({countries.join(", ")})
+            </div>
+            <div className="text-xs text-zinc-400 pt-2 border-t border-amber-900/40 flex justify-between">
+              <span>
+                Base CO2 Offset: <strong className="text-zinc-200">{baseOffset} Tons</strong>
+              </span>
+              <span>
+                Effective CO2 Offset:{" "}
+                <strong className="text-amber-300">{boostedOffset} Tons</strong>
+              </span>
+            </div>
+            {multiplier > 1 && (
+              <p className="text-xs text-amber-300/80">
+                This campaign qualifies for the {GEOGRAPHIC_DIVERSITY_MULTIPLIER}x geographic
+                diversity bonus.
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 // Step 5: Preview Component
-export function PreviewStep({ data, errors }: { data: CampaignWizardData; errors: WizardStepErrors }) {
+export function PreviewStep({
+  data,
+  errors,
+  onCheckAccessibility,
+  accessibilityAudit,
+}: {
+  data: CampaignWizardData;
+  errors: WizardStepErrors;
+  onCheckAccessibility?: () => void;
+  accessibilityAudit?: AccessibilityAuditResult | null;
+}) {
   const hasErrors = Object.keys(errors).length > 0;
+  const previewCountries = parseCountryList(data.targetCountries || "");
+  const previewMultiplier = computeGeographicMultiplier(previewCountries.length);
+  const previewBaseOffset = Number(data.co2OffsetTons) || 0;
+  const previewBoostedOffset = Math.round(previewBaseOffset * previewMultiplier);
 
   return (
     <div className="space-y-6">
+      <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/20 p-3 text-sm text-emerald-200" role="status">{publicationLabel}</div>
       <div className="border-b border-zinc-800 pb-4 flex items-center justify-between">
         <div>
           <h3 className="text-lg font-medium text-zinc-100 flex items-center gap-2">
@@ -472,6 +597,67 @@ export function PreviewStep({ data, errors }: { data: CampaignWizardData; errors
         >
           {hasErrors ? "Validation Errors Present" : "Ready to Publish"}
         </Badge>
+      </div>
+
+      {/* Automated WCAG 2.1 AA Accessibility Check Banner */}
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/90 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-lg">
+        <div className="flex items-center gap-3">
+          <div
+            className={`flex h-10 w-10 items-center justify-center rounded-lg border ${
+              accessibilityAudit && !accessibilityAudit.canPublish
+                ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                : accessibilityAudit && accessibilityAudit.warnings.length > 0
+                ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                : "bg-purple-500/10 text-purple-400 border-purple-500/20"
+            }`}
+          >
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-semibold text-zinc-100">
+                Automated Accessibility Check (WCAG 2.1 AA)
+              </h4>
+              {accessibilityAudit && (
+                <Badge
+                  variant={!accessibilityAudit.canPublish ? "destructive" : "outline"}
+                  className={
+                    !accessibilityAudit.canPublish
+                      ? ""
+                      : accessibilityAudit.warnings.length > 0
+                      ? "border-amber-500 text-amber-400"
+                      : "border-emerald-500 text-emerald-400"
+                  }
+                >
+                  {!accessibilityAudit.canPublish
+                    ? `${accessibilityAudit.criticalIssues.length} Critical Issue(s)`
+                    : accessibilityAudit.warnings.length > 0
+                    ? `${accessibilityAudit.warnings.length} Advisory Warning(s)`
+                    : "Passed"}
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              {accessibilityAudit
+                ? !accessibilityAudit.canPublish
+                  ? "Critical issues block publishing. Review fix suggestions to proceed."
+                  : accessibilityAudit.warnings.length > 0
+                  ? "Meets WCAG 2.1 AA requirements. Warnings are advisory."
+                  : "All WCAG 2.1 AA checks passed. Ready for launch."
+                : "Check your campaign page for WCAG 2.1 AA compliance before publishing."}
+            </p>
+          </div>
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onCheckAccessibility}
+          className="border-purple-600 bg-purple-600/10 text-purple-300 hover:bg-purple-600/20 shrink-0"
+        >
+          Check Accessibility
+        </Button>
       </div>
 
       {hasErrors && (
@@ -531,6 +717,23 @@ export function PreviewStep({ data, errors }: { data: CampaignWizardData; errors
             <span>Beneficiaries: <strong className="text-zinc-200">{data.targetBeneficiaries || "N/A"}</strong></span>
             <span>CO2 Offset: <strong className="text-amber-300">{data.co2OffsetTons} Tons</strong></span>
           </div>
+          <div className="text-xs text-zinc-400 pt-2 border-t border-zinc-800 flex justify-between">
+            <span>
+              Countries: <strong className="text-zinc-200">{previewCountries.length || "N/A"}</strong>
+            </span>
+            <span>
+              Geographic Bonus:{" "}
+              <strong className={previewMultiplier > 1 ? "text-amber-300" : "text-zinc-400"}>
+                {previewMultiplier}x
+              </strong>
+            </span>
+          </div>
+          {previewMultiplier > 1 && (
+            <div className="text-xs text-amber-300/90 pt-1">
+              Effective CO2 Offset with bonus:{" "}
+              <strong className="text-amber-200">{previewBoostedOffset} Tons</strong>
+            </div>
+          )}
         </div>
       </div>
     </div>

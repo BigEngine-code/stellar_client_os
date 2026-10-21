@@ -4,6 +4,29 @@
 
 export type CampaignStatus = "Active" | "Paused" | "Successful" | "Failed" | "Claimed";
 
+export type CampaignCategory =
+  | "Tech"
+  | "Art"
+  | "Social Impact"
+  | "Environment"
+  | "Education"
+  | "Health"
+  | "Community"
+  | "Other";
+
+export const CAMPAIGN_CATEGORIES: readonly CampaignCategory[] = [
+  "Tech",
+  "Art",
+  "Social Impact",
+  "Environment",
+  "Education",
+  "Health",
+  "Community",
+  "Other",
+] as const;
+
+export const MAX_CAMPAIGN_TAGS = 10;
+
 export type TreeType =
   | "Oak"
   | "Mangrove"
@@ -25,6 +48,36 @@ export type Region =
   | "Oceania"
   | "Global";
 
+export interface SustainabilityPillarScore {
+  score: number;
+  maxScore: number;
+  percentage: number;
+  grade: "Optimal" | "High" | "Moderate" | "Developing";
+  title: string;
+  rationale: string;
+  highlights: string[];
+}
+
+export type SustainabilityTier = "Optimal" | "High Impact" | "Moderate" | "Developing";
+
+export interface CampaignSustainabilityScore {
+  totalScore: number;
+  tier: SustainabilityTier;
+  tierDescription: string;
+  pillars: {
+    speciesDiversity: SustainabilityPillarScore;
+    climateImpact: SustainabilityPillarScore;
+    soilHealth: SustainabilityPillarScore;
+    biodiversityPotential: SustainabilityPillarScore;
+  };
+  recommendations: string[];
+}
+
+export interface CampaignCoordinates {
+  latitude: number;
+  longitude: number;
+}
+
 export interface CampaignData {
   id: string;
   title: string;
@@ -44,8 +97,14 @@ export interface CampaignData {
   location?: string;
   region?: Region;
   imageUrl?: string;
+  sponsorCount?: number;
   uniqueContributors?: number;
   contributionCount?: number;
+  sustainabilityScore?: CampaignSustainabilityScore;
+  isStaffPick?: boolean;
+  staffPickReason?: string;
+  category?: CampaignCategory;
+  tags?: string[];
 }
 
 export interface CampaignFilterOptions {
@@ -55,4 +114,8 @@ export interface CampaignFilterOptions {
   region: Region | "All";
   progressRange: "All" | "0-25%" | "25-50%" | "50-75%" | "75-100%" | "100%+";
   sortBy: "trending" | "newest" | "progress" | "target";
+  /** Selected categories; an empty array means "All". */
+  categories: CampaignCategory[];
+  /** Selected tags; an empty array means "All". */
+  tags: string[];
 }
