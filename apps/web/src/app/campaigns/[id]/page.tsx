@@ -26,6 +26,7 @@ import { CampaignFaqSection } from "@/components/modules/campaign/CampaignFaqSec
 import { BackerMessageComposer } from "@/components/modules/campaign/BackerMessageComposer";
 // #1207 — Campaign boost purchase (creator only)
 import { CampaignBoostPurchase } from "@/components/modules/campaign/CampaignBoostPurchase";
+import { CampaignRisksAndChallenges } from "@/components/campaign/CampaignRisksAndChallenges";
 
 export const runtime = "nodejs";
 
@@ -86,6 +87,8 @@ export default async function CampaignPage({
           />
         </div>
       </section>
+
+      <CampaignRisksAndChallenges content={campaign.risksAndChallenges} />
 
       {countdownVisible && deadline && <CampaignCountdown targetDate={deadline} />}
       <StretchGoals goals={campaign.stretchGoals ?? []} raisedAmount={campaign.raisedAmount} />
