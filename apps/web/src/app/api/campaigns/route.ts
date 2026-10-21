@@ -1,4 +1,5 @@
 import { createCampaign, findDuplicateCampaigns, queryCampaigns } from "@/services/campaign.service";
+import { fraudDetectionService } from "@/services/fraud-detection.service";
 import {
   autoTranslate,
   detectLanguage,
@@ -104,6 +105,7 @@ async function postCampaign(request: Request) {
       underrepresentedTags?: string[];
       durationMs?: number;
       deadline?: number;
+      countdownEnabled?: boolean;
       goalAmount?: string;
       network?: "testnet" | "mainnet";
       language?: string;
@@ -281,13 +283,41 @@ async function postCampaign(request: Request) {
       durationMs,
       goalAmount: body.goalAmount,
       network: body.network,
+      deadline: body.deadline,
+      countdownEnabled: body.countdownEnabled === true,
       nonprofitPartner,
       language,
       translations,
       localizedContent: body.localizedContent,
       insurancePool,
     });
-    return Response.json(campaign, { status: 201 });
+
+    // Automated AI fraud detection review on campaign publish
+    const fraudReview = await fraudDetectionService.reviewCampaignListing({
+      id: campaign.id,
+      title: campaign.name,
+      creatorAddress: campaign.creator,
+      description: campaign.description,
+      goalAmount: campaign.goalAmount,
+      treeCount: campaign.treeCount,
+      durationDays: campaign.durationMs ? Math.round(campaign.durationMs / 86_400_000) : undefined,
+      location: campaign.location,
+      submittedLocation: body.gpsLocations?.[0] ? { latitude: body.gpsLocations[0].latitude, longitude: body.gpsLocations[0].longitude } : undefined,
+    });
+
+    return Response.json(
+      {
+        ...campaign,
+        fraudReview: {
+          action: fraudReview.action,
+          riskScore: fraudReview.report.overallRiskScore,
+          riskLevel: fraudReview.report.riskLevel,
+          recommendation: fraudReview.report.recommendation,
+          reviewStatus: fraudReview.reviewItem ? fraudReview.reviewItem.status : 'PASSED',
+        },
+      },
+      { status: 201 }
+    );
   } catch {
     return Response.json({ error: "Invalid JSON request body" }, { status: 400 });
   }
