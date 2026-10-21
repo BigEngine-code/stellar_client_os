@@ -16,12 +16,13 @@ interface CommentThreadProps {
   replies: CampaignDiscussionComment[];
   childrenByParent: Map<string, CampaignDiscussionComment[]>;
   isCreator: boolean;
+  canUpvote: boolean;
   onReply: (commentId: string, content: string, officialAnswer: boolean) => Promise<boolean>;
-  onUpvote: (commentId: string) => Promise<void>;
+  onUpvote: (comment: CampaignDiscussionComment) => Promise<void>;
   onPin: (commentId: string) => Promise<void>;
 }
 
-function CommentThread({ comment, replies, childrenByParent, isCreator, onReply, onUpvote, onPin }: CommentThreadProps) {
+function CommentThread({ comment, replies, childrenByParent, isCreator, canUpvote, onReply, onUpvote, onPin }: CommentThreadProps) {
   const [replying, setReplying] = useState(false);
   const [draft, setDraft] = useState("");
   const [officialAnswer, setOfficialAnswer] = useState(false);
@@ -71,8 +72,9 @@ function CommentThread({ comment, replies, childrenByParent, isCreator, onReply,
           type="button"
           size="sm"
           variant="outline"
+          disabled={!canUpvote}
           aria-pressed={comment.hasUpvoted}
-          onClick={() => void onUpvote(comment.id)}
+          onClick={() => void onUpvote(comment)}
         >
           <ThumbsUp className="mr-1.5 h-3.5 w-3.5" />
           {comment.upvotes} {comment.upvotes === 1 ? "upvote" : "upvotes"}
@@ -139,6 +141,7 @@ function CommentThread({ comment, replies, childrenByParent, isCreator, onReply,
               replies={childrenByParent.get(reply.id) ?? []}
               childrenByParent={childrenByParent}
               isCreator={isCreator}
+              canUpvote={canUpvote}
               onReply={onReply}
               onUpvote={onUpvote}
               onPin={onPin}
@@ -155,7 +158,8 @@ export function CampaignDiscussion({ campaignId, creatorAddress }: CampaignDiscu
   const walletAddress = wallet?.address ?? "";
   const isCreator = Boolean(walletAddress
     && walletAddress.trim().toLowerCase() === creatorAddress.trim().toLowerCase());
-  const [visitorId, setVisitorId] = useState("");
+  const [voterToken, setVoterToken] = useState("");
+  const [actorIdentity, setActorIdentity] = useState<{ address: string; token: string } | null>(null);
   const [comments, setComments] = useState<CampaignDiscussionComment[]>([]);
   const [authorName, setAuthorName] = useState("");
   const [draft, setDraft] = useState("");
@@ -163,33 +167,56 @@ export function CampaignDiscussion({ campaignId, creatorAddress }: CampaignDiscu
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const viewerId = walletAddress || visitorId;
-
   useEffect(() => {
-    try {
-      const storageKey = "campaign-discussion-visitor-id";
-      let id = window.localStorage.getItem(storageKey);
-      if (!id) {
-        id = window.crypto.randomUUID?.()
-          ?? `visitor-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        window.localStorage.setItem(storageKey, id);
+    let cancelled = false;
+    const storageKey = `campaign-discussion-voter-token:${campaignId}`;
+    const initializeVoter = async () => {
+      let savedToken: string | null = null;
+      try {
+        savedToken = window.localStorage.getItem(storageKey);
+      } catch {
+        // Continue with an in-memory token when browser storage is unavailable.
       }
-      setVisitorId(id);
-    } catch {
-      setError("Could not initialize your visitor identity. Check browser storage permissions and reload.");
-    }
-  }, []);
+      if (savedToken) {
+        if (!cancelled) setVoterToken(savedToken);
+        return;
+      }
+      const response = await fetch(`/api/campaigns/${encodeURIComponent(campaignId)}/discussion/identity`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "visitor" }),
+      });
+      const data = await response.json() as { voterToken?: string; error?: string };
+      if (!response.ok || !data.voterToken) {
+        throw new Error(data.error ?? "Could not initialize your voting identity.");
+      }
+      try {
+        window.localStorage.setItem(storageKey, data.voterToken);
+      } catch {
+        // Keep the server-issued token for this page view.
+      }
+      if (!cancelled) setVoterToken(data.voterToken);
+    };
+    void initializeVoter().catch((identityError: unknown) => {
+      if (!cancelled) {
+        setError(identityError instanceof Error ? identityError.message : "Could not initialize your voting identity.");
+      }
+    });
+    return () => { cancelled = true; };
+  }, [campaignId]);
 
   const loadComments = useCallback(async () => {
-    if (!viewerId) return;
     const response = await fetch(
-      `/api/campaigns/${encodeURIComponent(campaignId)}/discussion?voterId=${encodeURIComponent(viewerId)}`,
-      { cache: "no-store" },
+      `/api/campaigns/${encodeURIComponent(campaignId)}/discussion`,
+      {
+        cache: "no-store",
+        headers: voterToken ? { "x-campaign-discussion-voter-token": voterToken } : undefined,
+      },
     );
     const data = await response.json() as { comments?: CampaignDiscussionComment[]; error?: string };
     if (!response.ok) throw new Error(data.error ?? "Could not load campaign discussion.");
     setComments(data.comments ?? []);
-  }, [campaignId, viewerId]);
+  }, [campaignId, voterToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -217,10 +244,57 @@ export function CampaignDiscussion({ campaignId, creatorAddress }: CampaignDiscu
     [comments],
   );
 
+  const getActorToken = async (): Promise<string> => {
+    if (!walletAddress || !wallet?.signMessage) {
+      throw new Error("Connect a compatible wallet to verify your creator identity.");
+    }
+    if (actorIdentity?.address === walletAddress) return actorIdentity.token;
+
+    const endpoint = `/api/campaigns/${encodeURIComponent(campaignId)}/discussion/identity`;
+    const challengeResponse = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "challenge", address: walletAddress }),
+    });
+    const challenge = await challengeResponse.json() as { nonce?: string; message?: string; error?: string };
+    if (!challengeResponse.ok || !challenge.nonce || !challenge.message) {
+      throw new Error(challenge.error ?? "Could not verify your wallet.");
+    }
+    const signature = await wallet.signMessage(challenge.message);
+    if (signature.signerAddress.trim().toLowerCase() !== walletAddress.trim().toLowerCase()) {
+      throw new Error("The wallet signed with a different address.");
+    }
+    const verifyResponse = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "verify",
+        address: walletAddress,
+        nonce: challenge.nonce,
+        signature: signature.signedMessage,
+      }),
+    });
+    const verified = await verifyResponse.json() as { actorToken?: string; error?: string };
+    if (!verifyResponse.ok || !verified.actorToken) {
+      throw new Error(verified.error ?? "Could not verify your wallet signature.");
+    }
+    setActorIdentity({ address: walletAddress, token: verified.actorToken });
+    return verified.actorToken;
+  };
+
+  const refreshAfterWrite = async (message: string) => {
+    try {
+      await loadComments();
+    } catch {
+      setError(message);
+    }
+  };
+
   const submitComment = async (content: string, parentId?: string, officialAnswer = false): Promise<boolean> => {
     setError("");
     setSubmitting(true);
     try {
+      const actorToken = isCreator || officialAnswer ? await getActorToken() : undefined;
       const response = await fetch(`/api/campaigns/${encodeURIComponent(campaignId)}/discussion`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -228,14 +302,26 @@ export function CampaignDiscussion({ campaignId, creatorAddress }: CampaignDiscu
           content,
           parentId,
           authorName: isCreator ? "Campaign creator" : (authorName.trim() || "Visitor"),
-          authorAddress: walletAddress || undefined,
+          actorToken,
           officialAnswer,
         }),
       });
-      const data = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(data.error ?? "Could not post your comment.");
-      await loadComments();
-      if (!parentId) setDraft("");
+      if (!response.ok) {
+        const data = await response.json() as { error?: string };
+        throw new Error(data.error ?? "Could not post your comment.");
+      }
+      setDraft(parentId ? draft : "");
+      setSubmitting(false);
+      let data: { comment?: CampaignDiscussionComment } = {};
+      try {
+        data = await response.json() as { comment?: CampaignDiscussionComment };
+      } catch {
+        // The accepted write remains successful if its response body is unreadable.
+      }
+      if (data.comment) {
+        setComments((previous) => [data.comment!, ...previous.filter((item) => item.id !== data.comment!.id)]);
+      }
+      void refreshAfterWrite("Your comment was posted, but the discussion could not be refreshed.");
       return true;
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Could not post your comment.");
@@ -245,31 +331,46 @@ export function CampaignDiscussion({ campaignId, creatorAddress }: CampaignDiscu
     }
   };
 
-  const updateComment = async (payload: Record<string, string>) => {
+  const updateComment = async (payload: Record<string, string | boolean>) => {
     setError("");
     try {
+      let writePayload = payload;
+      if (payload.action === "pin") {
+        writePayload = { ...payload, actorToken: await getActorToken() };
+      }
       const response = await fetch(`/api/campaigns/${encodeURIComponent(campaignId)}/discussion`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(writePayload),
       });
-      const data = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(data.error ?? "Could not update the comment.");
-      await loadComments();
+      if (!response.ok) {
+        const data = await response.json() as { error?: string };
+        throw new Error(data.error ?? "Could not update the comment.");
+      }
+      let data: { comment?: CampaignDiscussionComment } = {};
+      try {
+        data = await response.json() as { comment?: CampaignDiscussionComment };
+      } catch {
+        // The accepted update remains successful if its response body is unreadable.
+      }
+      if (data.comment) {
+        setComments((previous) => previous.map((item) => item.id === data.comment!.id ? data.comment! : item));
+      }
+      void refreshAfterWrite("Your update was saved, but the discussion could not be refreshed.");
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : "Could not update the comment.");
     }
   };
 
-  const handleUpvote = (commentId: string) => updateComment({
+  const handleUpvote = (comment: CampaignDiscussionComment) => updateComment({
     action: "upvote",
-    commentId,
-    voterId: viewerId,
+    commentId: comment.id,
+    voterToken,
+    upvoted: !comment.hasUpvoted,
   });
   const handlePin = (commentId: string) => updateComment({
     action: "pin",
     commentId,
-    actorAddress: walletAddress,
   });
 
   return (
@@ -316,7 +417,7 @@ export function CampaignDiscussion({ campaignId, creatorAddress }: CampaignDiscu
           />
         </label>
         <div className="flex justify-end">
-          <Button type="submit" disabled={submitting || !draft.trim() || !viewerId}>
+          <Button type="submit" disabled={submitting || !draft.trim()}>
             <Send className="mr-1.5 h-4 w-4" /> Post comment
           </Button>
         </div>
@@ -334,6 +435,7 @@ export function CampaignDiscussion({ campaignId, creatorAddress }: CampaignDiscu
               replies={childrenByParent.get(comment.id) ?? []}
               childrenByParent={childrenByParent}
               isCreator={isCreator}
+              canUpvote={Boolean(voterToken)}
               onReply={(commentId, content, officialAnswer) => submitComment(content, commentId, officialAnswer)}
               onUpvote={handleUpvote}
               onPin={handlePin}

@@ -1,4 +1,8 @@
 import { randomUUID } from "node:crypto";
+import type {
+  VerifiedCampaignDiscussionActor,
+  VerifiedCampaignDiscussionVoter,
+} from "./campaign-discussion-auth.service";
 
 export interface CampaignDiscussionComment {
   id: string;
@@ -24,8 +28,30 @@ const discussions = new Map<string, StoredCampaignDiscussionComment[]>();
 export const DISCUSSION_CONTENT_MAX_LENGTH = 1000;
 export const DISCUSSION_AUTHOR_NAME_MAX_LENGTH = 60;
 
-function normalizeAddress(address: string | undefined): string {
-  return address?.trim().toLowerCase() ?? "";
+export type CampaignDiscussionErrorCode =
+  | "invalid_content"
+  | "invalid_author_name"
+  | "parent_not_found"
+  | "invalid_voter"
+  | "comment_not_found"
+  | "creator_required"
+  | "invalid_official_answer";
+
+const CAMPAIGN_DISCUSSION_ERROR_MESSAGES: Record<CampaignDiscussionErrorCode, string> = {
+  invalid_content: `Comment must be between 1 and ${DISCUSSION_CONTENT_MAX_LENGTH} characters.`,
+  invalid_author_name: `Name must be between 1 and ${DISCUSSION_AUTHOR_NAME_MAX_LENGTH} characters.`,
+  parent_not_found: "The comment being replied to was not found.",
+  invalid_voter: "A valid voter identity is required.",
+  comment_not_found: "Comment not found.",
+  creator_required: "Only the campaign creator can perform this action.",
+  invalid_official_answer: "Only the creator can mark a reply as an official answer.",
+};
+
+export class CampaignDiscussionError extends Error {
+  constructor(readonly code: CampaignDiscussionErrorCode) {
+    super(CAMPAIGN_DISCUSSION_ERROR_MESSAGES[code]);
+    this.name = "CampaignDiscussionError";
+  }
 }
 
 function findComment(campaignId: string, commentId: string) {
@@ -53,7 +79,7 @@ export function createCampaignDiscussionComment(input: {
   campaignId: string;
   parentId?: string;
   authorName: string;
-  authorAddress?: string;
+  actor?: VerifiedCampaignDiscussionActor;
   content: string;
   officialAnswer?: boolean;
   creatorAddress: string;
@@ -62,27 +88,27 @@ export function createCampaignDiscussionComment(input: {
   const content = input.content.trim();
   const authorName = input.authorName.trim();
   if (!content || content.length > DISCUSSION_CONTENT_MAX_LENGTH) {
-    throw new Error(`Comment must be between 1 and ${DISCUSSION_CONTENT_MAX_LENGTH} characters.`);
+    throw new CampaignDiscussionError("invalid_content");
   }
   if (!authorName || authorName.length > DISCUSSION_AUTHOR_NAME_MAX_LENGTH) {
-    throw new Error(`Name must be between 1 and ${DISCUSSION_AUTHOR_NAME_MAX_LENGTH} characters.`);
+    throw new CampaignDiscussionError("invalid_author_name");
   }
 
   const comments = discussions.get(input.campaignId) ?? [];
   let parentId: string | null = null;
   if (input.parentId) {
     if (!comments.some((comment) => comment.id === input.parentId)) {
-      throw new Error("The comment being replied to was not found.");
+      throw new CampaignDiscussionError("parent_not_found");
     }
     parentId = input.parentId;
   }
 
   const isCreatorReply = Boolean(
-    input.authorAddress
-      && normalizeAddress(input.authorAddress) === normalizeAddress(input.creatorAddress),
+    input.actor
+      && input.actor.address.trim().toLowerCase() === input.creatorAddress.trim().toLowerCase(),
   );
   if (input.officialAnswer && (!isCreatorReply || !parentId)) {
-    throw new Error("Only the creator can mark a reply as an official answer.");
+    throw new CampaignDiscussionError("invalid_official_answer");
   }
 
   const comment: StoredCampaignDiscussionComment = {
@@ -90,7 +116,7 @@ export function createCampaignDiscussionComment(input: {
     campaignId: input.campaignId,
     parentId,
     authorName,
-    ...(input.authorAddress?.trim() ? { authorAddress: input.authorAddress.trim() } : {}),
+    ...(input.actor ? { authorAddress: input.actor.address } : {}),
     content,
     createdAt: input.now ?? Date.now(),
     upvotes: 0,
@@ -104,40 +130,41 @@ export function createCampaignDiscussionComment(input: {
   return toPublicComment(comment);
 }
 
-export function toggleCampaignDiscussionUpvote(
+export function setCampaignDiscussionUpvote(
   campaignId: string,
   commentId: string,
-  voterId: string,
+  voter: VerifiedCampaignDiscussionVoter,
+  upvoted: boolean,
 ): CampaignDiscussionComment {
-  const normalizedVoterId = voterId.trim();
-  if (!normalizedVoterId || normalizedVoterId.length > 120) {
-    throw new Error("A valid voter identity is required.");
-  }
+  const voterId = voter.id;
+  if (!voterId) throw new CampaignDiscussionError("invalid_voter");
   const comment = findComment(campaignId, commentId);
-  if (!comment) throw new Error("Comment not found.");
+  if (!comment) throw new CampaignDiscussionError("comment_not_found");
 
-  if (comment.voterIds.has(normalizedVoterId)) {
-    comment.voterIds.delete(normalizedVoterId);
-    comment.upvotes -= 1;
-  } else {
-    comment.voterIds.add(normalizedVoterId);
-    comment.upvotes += 1;
+  const hasUpvoted = comment.voterIds.has(voterId);
+  if (upvoted !== hasUpvoted) {
+    if (upvoted) {
+      comment.voterIds.add(voterId);
+      comment.upvotes += 1;
+    } else {
+      comment.voterIds.delete(voterId);
+      comment.upvotes -= 1;
+    }
   }
-  return toPublicComment(comment, normalizedVoterId);
+  return toPublicComment(comment, voterId);
 }
 
 export function toggleCampaignDiscussionPin(input: {
   campaignId: string;
   commentId: string;
-  actorAddress: string;
+  actor: VerifiedCampaignDiscussionActor;
   creatorAddress: string;
 }): CampaignDiscussionComment {
-  if (!normalizeAddress(input.actorAddress)
-    || normalizeAddress(input.actorAddress) !== normalizeAddress(input.creatorAddress)) {
-    throw new Error("Only the campaign creator can pin comments.");
+  if (input.actor.address.trim().toLowerCase() !== input.creatorAddress.trim().toLowerCase()) {
+    throw new CampaignDiscussionError("creator_required");
   }
   const comment = findComment(input.campaignId, input.commentId);
-  if (!comment) throw new Error("Comment not found.");
+  if (!comment) throw new CampaignDiscussionError("comment_not_found");
   comment.pinned = !comment.pinned;
   return toPublicComment(comment);
 }
